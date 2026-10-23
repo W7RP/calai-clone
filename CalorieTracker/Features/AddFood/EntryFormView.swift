@@ -117,7 +117,8 @@ struct EntryFormView: View {
         case .new:
             var food: FoodItem?
             if let per100g = macros.per100g(fromGrams: amount) {
-                food = cacheFood(name: foodName, per100g: per100g, servingGrams: amount)
+                food = FoodCache.upsert(in: context, name: foodName, barcode: barcode, per100g: per100g,
+                                        servingGrams: amount, source: .manual)
             }
             context.insert(LogEntry(date: date, meal: meal, foodName: foodName, grams: amount,
                                     macros: macros, source: .manual, foodItem: food))
@@ -129,27 +130,6 @@ struct EntryFormView: View {
             entry.date = date
         }
         dismiss()
-    }
-
-    /// Reuses a manual food with the same name (or barcode) so the recent list doesn't fill with duplicates.
-    private func cacheFood(name: String, per100g: Macros, servingGrams: Double) -> FoodItem {
-        let manual = FoodSource.manual.rawValue
-        let existing = (try? context.fetch(FetchDescriptor<FoodItem>(predicate: #Predicate { $0.sourceRaw == manual }))) ?? []
-        let match = existing.first { food in
-            if let barcode, food.barcode == barcode { return true }
-            return food.name.localizedCaseInsensitiveCompare(name) == .orderedSame
-        }
-        let item = match ?? FoodItem(name: name, per100g: per100g, source: .manual)
-        if match == nil { context.insert(item) }
-        item.name = name
-        item.kcalPer100g = per100g.kcal
-        item.proteinPer100g = per100g.protein
-        item.carbsPer100g = per100g.carbs
-        item.fatPer100g = per100g.fat
-        item.servingGrams = servingGrams
-        item.barcode = barcode ?? item.barcode
-        item.lastUsed = .now
-        return item
     }
 
     /// The day's date with the current clock time, so back-filling yesterday still lands on yesterday.
