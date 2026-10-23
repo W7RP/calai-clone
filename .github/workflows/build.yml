@@ -48,6 +48,16 @@ jobs:
           cp -R build/Build/Products/Release-iphoneos/CalorieTracker.app Payload/
           zip -qr CalorieTracker-${{ github.run_number }}.ipa Payload
 
+      - name: Check the bundle
+        # Fails the run if the app is missing its binary or the build number didn't stamp.
+        run: |
+          APP=Payload/CalorieTracker.app
+          lipo -info "$APP/CalorieTracker"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleVersion" -c "Print :BuildCommit" -c "Print :MinimumOSVersion" "$APP/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")" = "${{ github.run_number }}"
+          ls -la "$APP"
+          ls -la CalorieTracker-*.ipa
+
       - uses: actions/upload-artifact@v4
         with:
           name: CalorieTracker-${{ github.run_number }}
