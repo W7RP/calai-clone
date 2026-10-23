@@ -17,10 +17,19 @@ struct EntryFormView: View {
     @State private var meal = Meal.snack
     @State private var date = Date.now
     @State private var loaded = false
+    @State private var barcode: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                if let barcode {
+                    Section {
+                        Label("Barcode \(barcode) isn't in Open Food Facts. Enter it from the label and it'll be remembered for next time.",
+                              systemImage: "barcode")
+                            .font(.footnote)
+                    }
+                }
+
                 Section {
                     TextField("Food", text: $name)
                         .textInputAutocapitalization(.sentences)
@@ -80,9 +89,10 @@ struct EntryFormView: View {
         guard !loaded else { return }
         loaded = true
         switch editor {
-        case .new(let day):
+        case .new(let day, let barcode):
             date = Self.combine(day: day, timeFrom: .now)
             meal = Meal.suggested(for: date)
+            self.barcode = barcode
         case .edit(let entry):
             name = entry.foodName
             grams = NumberInput.format(entry.grams)
@@ -107,9 +117,7 @@ struct EntryFormView: View {
         case .new:
             var food: FoodItem?
             if let per100g = macros.per100g(fromGrams: amount) {
-                let item = FoodItem(name: foodName, per100g: per100g, servingGrams: amount, source: .manual)
-                context.insert(item)
-                food = item
+                food = cacheFood(name: foodName, per100g: per100g, servingGrams: amount)
             }
             context.insert(LogEntry(date: date, meal: meal, foodName: foodName, grams: amount,
                                     macros: macros, source: .manual, foodItem: food))
@@ -121,6 +129,27 @@ struct EntryFormView: View {
             entry.date = date
         }
         dismiss()
+    }
+
+    /// Reuses a manual food with the same name (or barcode) so the recent list doesn't fill with duplicates.
+    private func cacheFood(name: String, per100g: Macros, servingGrams: Double) -> FoodItem {
+        let manual = FoodSource.manual.rawValue
+        let existing = (try? context.fetch(FetchDescriptor<FoodItem>(predicate: #Predicate { $0.sourceRaw == manual }))) ?? []
+        let match = existing.first { food in
+            if let barcode, food.barcode == barcode { return true }
+            return food.name.localizedCaseInsensitiveCompare(name) == .orderedSame
+        }
+        let item = match ?? FoodItem(name: name, per100g: per100g, source: .manual)
+        if match == nil { context.insert(item) }
+        item.name = name
+        item.kcalPer100g = per100g.kcal
+        item.proteinPer100g = per100g.protein
+        item.carbsPer100g = per100g.carbs
+        item.fatPer100g = per100g.fat
+        item.servingGrams = servingGrams
+        item.barcode = barcode ?? item.barcode
+        item.lastUsed = .now
+        return item
     }
 
     /// The day's date with the current clock time, so back-filling yesterday still lands on yesterday.
