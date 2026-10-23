@@ -19,6 +19,9 @@ targets:
       path: CalorieTracker/Info.plist
       properties:
         CFBundleDisplayName: Calories
+        # XcodeGen otherwise writes a literal "1" here, which ignores the CI build number.
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         # Filled in by CI so the app can show which commit it was built from.
