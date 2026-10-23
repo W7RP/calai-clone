@@ -50,13 +50,16 @@ jobs:
 
       - name: Check the bundle
         # Fails the run if the app is missing its binary or the build number didn't stamp.
+        # Results go out as annotations so they're readable from the PR checks page.
         run: |
           APP=Payload/CalorieTracker.app
-          lipo -info "$APP/CalorieTracker"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleVersion" -c "Print :BuildCommit" -c "Print :MinimumOSVersion" "$APP/Info.plist"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")" = "${{ github.run_number }}"
-          ls -la "$APP"
-          ls -la CalorieTracker-*.ipa
+          pb() { /usr/libexec/PlistBuddy -c "Print :$1" "$APP/Info.plist" 2>&1; }
+          echo "::notice title=Bundle contents::$(ls "$APP" | tr '\n' ' ')"
+          echo "::notice title=Binary::$(lipo -info "$APP/CalorieTracker" 2>&1)"
+          echo "::notice title=Info.plist::id=$(pb CFBundleIdentifier) version=$(pb CFBundleVersion) commit=$(pb BuildCommit) minOS=$(pb MinimumOSVersion)"
+          echo "::notice title=ipa size::$(ls -la CalorieTracker-*.ipa)"
+          test -f "$APP/CalorieTracker"
+          test "$(pb CFBundleVersion)" = "${{ github.run_number }}"
 
       - uses: actions/upload-artifact@v4
         with:
