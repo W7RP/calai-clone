@@ -133,3 +133,15 @@ final class DailyGoal {
         self.effectiveFrom = effectiveFrom
     }
 }
+
+/// Optional body weight log for the trend chart. Kilograms.
+@Model
+final class WeightEntry {
+    var date: Date
+    var kilograms: Double
+
+    init(date: Date, kilograms: Double) {
+        self.date = date
+        self.kilograms = kilograms
+    }
+}
