@@ -5,6 +5,9 @@ struct TodayView: View {
     @State private var day = Date.now
     @State private var editor: EntryEditor?
     @State private var showingSettings = false
+    @State private var showingScanner = false
+    @State private var showingRecents = false
+    @State private var barcodeNotFound: String?
 
     var body: some View {
         NavigationStack {
@@ -26,8 +29,10 @@ struct TodayView: View {
                             .disabled(Calendar.current.isDateInToday(day))
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Add food", systemImage: "plus") {
-                            editor = .new(day: day)
+                        Menu("Add food", systemImage: "plus") {
+                            Button("Scan barcode", systemImage: "barcode.viewfinder") { showingScanner = true }
+                            Button("Recent foods", systemImage: "clock") { showingRecents = true }
+                            Button("Enter manually", systemImage: "square.and.pencil") { editor = .new(day: day) }
                         }
                     }
                 }
@@ -36,6 +41,18 @@ struct TodayView: View {
                 }
                 .sheet(isPresented: $showingSettings) {
                     SettingsView()
+                }
+                .sheet(isPresented: $showingScanner, onDismiss: {
+                    // Open manual entry only after the scanner sheet is gone; two sheets can't overlap.
+                    if let code = barcodeNotFound {
+                        barcodeNotFound = nil
+                        editor = .new(day: day, barcode: code)
+                    }
+                }) {
+                    ScanFlowView(day: day) { barcodeNotFound = $0 }
+                }
+                .sheet(isPresented: $showingRecents) {
+                    RecentFoodsView(day: day)
                 }
         }
     }
@@ -54,12 +71,12 @@ struct TodayView: View {
 
 /// What the entry sheet is editing: a new entry for a day, or an existing one.
 enum EntryEditor: Identifiable {
-    case new(day: Date)
+    case new(day: Date, barcode: String? = nil)
     case edit(LogEntry)
 
     var id: String {
         switch self {
-        case .new(let day): "new-\(day.timeIntervalSince1970)"
+        case .new(let day, let barcode): "new-\(day.timeIntervalSince1970)-\(barcode ?? "")"
         case .edit(let entry): entry.id.uuidString
         }
     }
