@@ -16,7 +16,7 @@ final class CoachSession {
     private(set) var error: String?
 
     /// Older turns are dropped past this, so long chats stay fast and cheap.
-    static let historyLimit = 12
+    nonisolated static let historyLimit = 12
 
     private var task: Task<Void, Never>?
     /// Builds the client for each question. Replaced in tests.
