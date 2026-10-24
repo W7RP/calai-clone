@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \LogEntry.date) private var entries: [LogEntry]
 
     var body: some View {
         NavigationStack {
@@ -13,6 +14,14 @@ struct SettingsView: View {
                 Section("AI logging") {
                     NavigationLink("ChatGPT") { ChatGPTSettingsView() }
                 }
+                Section {
+                    ShareLink(item: exportFile, preview: SharePreview("Food log (\(entries.count) entries)")) {
+                        Label("Export food log (CSV)", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(entries.isEmpty)
+                } footer: {
+                    Text("Everything stays on this phone. Export is the only way data leaves it, apart from AI requests.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -22,6 +31,17 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+}
+
+extension SettingsView {
+    private var exportFile: CSVFile {
+        let rows = entries.map {
+            CSVExport.Row(date: $0.date, meal: $0.mealRaw, food: $0.foodName, grams: $0.grams,
+                          macros: $0.macros, source: $0.sourceRaw)
+        }
+        let stamp = Date.now.formatted(.iso8601.year().month().day())
+        return CSVFile(text: CSVExport.csv(rows), filename: "food-log-\(stamp).csv")
     }
 }
 
