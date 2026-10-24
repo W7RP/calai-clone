@@ -35,4 +35,4 @@ Installing a newer build over an existing one keeps the app's data.
 ## Troubleshooting
 - *"Could not find AltServer"*: PC and phone on different networks, AltServer not running, or Windows Firewall blocking it. Plugging in by USB always works as a fallback.
 - *"Maximum number of apps"*: remove another sideloaded app.
-- App crashes straight away after install: tell Claude the build number and what you saw.
+- App crashes straight away after install: note the build number and what you saw.
