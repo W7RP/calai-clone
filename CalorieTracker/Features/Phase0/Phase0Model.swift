@@ -12,8 +12,8 @@ final class Phase0Model {
     var grantedScopes: [String] = []
     var expiresAt: Date?
     var models: [ResponsesClient.Model] = []
-    var selectedModel = UserDefaults.standard.string(forKey: FoodEstimator.modelKey) ?? "" {
-        didSet { UserDefaults.standard.set(selectedModel, forKey: FoodEstimator.modelKey) }
+    var selectedModel = UserDefaults.standard.string(forKey: AIProviderSettings.modelDefaultsKey(for: .chatGPT)) ?? "" {
+        didSet { UserDefaults.standard.set(selectedModel, forKey: AIProviderSettings.modelDefaultsKey(for: .chatGPT)) }
     }
     var output = ""
     var eventLog: [String] = []

@@ -1,7 +1,7 @@
 import PhotosUI
 import SwiftUI
 
-/// Describe a meal and/or attach a photo; ChatGPT proposes items, which are reviewed before saving.
+/// Describe a meal and/or attach a photo; the chosen AI provider proposes items, which are reviewed before saving.
 struct AIAddView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -16,6 +16,7 @@ struct AIAddView: View {
     @State private var error: String?
     @State private var estimate: FoodEstimate?
     @State private var didAutoOpenCamera = false
+    @State private var provider = AIProviderSettings.activeProvider
 
     var body: some View {
         NavigationStack {
@@ -53,7 +54,7 @@ struct AIAddView: View {
                     }
                 }
             }
-            .navigationTitle("Log with ChatGPT")
+            .navigationTitle("Log with \(provider.name)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -66,7 +67,7 @@ struct AIAddView: View {
             }
             .overlay {
                 if isWorking {
-                    ProgressView("Asking ChatGPT…")
+                    ProgressView("Asking \(provider.name)…")
                         .padding()
                         .background(.regularMaterial, in: .rect(cornerRadius: 12))
                 }
@@ -107,7 +108,7 @@ struct AIAddView: View {
                 error = "Couldn't read that photo."
                 return
             }
-            estimate = try await FoodEstimator().estimate(description: description, jpeg: jpeg)
+            estimate = try await FoodEstimator.current().estimate(description: description, jpeg: jpeg)
         } catch {
             self.error = error.localizedDescription
         }
@@ -118,6 +119,7 @@ extension FoodEstimate: Hashable {
     func hash(into hasher: inout Hasher) {
         hasher.combine(items.count)
         hasher.combine(note)
+        hasher.combine(analysis)
         for item in items { hasher.combine(item.name) }
     }
 }

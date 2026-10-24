@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 /// Everything needed to call the API and to sign in again. Stored only in the Keychain.
 struct TokenSet: Codable, Sendable {
@@ -18,41 +17,14 @@ enum TokenStore {
     private static let account = "tokens"
 
     static func load() -> TokenSet? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return try? JSONDecoder().decode(TokenSet.self, from: data)
+        Keychain.read(service: service, account: account).flatMap { try? JSONDecoder().decode(TokenSet.self, from: $0) }
     }
 
     static func save(_ tokens: TokenSet) throws {
-        let data = try JSONEncoder().encode(tokens)
-        delete()
-        let attributes: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecValueData as String: data,
-        ]
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
-        }
+        try Keychain.write(JSONEncoder().encode(tokens), service: service, account: account)
     }
 
     static func delete() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
+        Keychain.delete(service: service, account: account)
     }
 }

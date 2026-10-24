@@ -1,16 +1,17 @@
 # Calorie tracker (iOS, personal use)
 
-Native SwiftUI calorie tracker for my own iPhone. Three ways to log food: barcode scan, photo, manual entry. AI calls run on my ChatGPT plan through Sign in with ChatGPT (OAuth). Not going on the App Store.
+Native SwiftUI calorie tracker. Three ways to log food: barcode scan, photo, manual entry. AI is bring-your-own: the user signs in with ChatGPT (OAuth, uses their plan) or enters their own Claude, OpenAI, Gemini or OpenAI-compatible key. No subscription, no backend. Not going on the App Store.
 
 Read these before doing anything non-trivial:
 - `docs/spec.md` — what the app does and what it doesn't
 - `docs/architecture.md` — modules, data model, build phases
 - `docs/openai-signin.md` — OAuth flow, Responses API limits, known iOS risk
+- `docs/ai-providers.md` — the provider layer, prompt, schema, validation and retry
 - `docs/open-questions.md` — unresolved decisions; don't silently pick one
 
 ## Hard rules
-- No API keys anywhere (no `OPENAI_API_KEY`, no bundled secrets). The only credential is the OAuth token set, stored in the Keychain.
-- Never log tokens, refresh tokens, or ID tokens.
+- No bundled keys or secrets (no `OPENAI_API_KEY` in code, config or CI). Credentials are the user's own: the ChatGPT OAuth token set and any provider keys they paste in. Both live only in the Keychain.
+- Never log tokens, refresh tokens, ID tokens, API keys, or request bodies. Keys go in headers, never URLs.
 - Target iOS 26+, Swift 6 strict concurrency, SwiftUI + SwiftData. No third-party packages unless there's a real reason; ask first.
 - Metric units by default (g, kg, ml, kcal).
 - AI numbers are estimates. Every AI-produced entry is shown for review and editable before it's saved.
