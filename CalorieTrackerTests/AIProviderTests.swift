@@ -61,7 +61,8 @@ final class BodyRecorder: Sendable {
 }
 
 private func json(_ request: URLRequest) throws -> [String: Any] {
-    try #require(try JSONSerialization.jsonObject(with: try #require(request.httpBody)) as? [String: Any])
+    let body = try #require(request.httpBody)
+    return try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
 }
 
 private let sampleRequest = LLMRequest(
