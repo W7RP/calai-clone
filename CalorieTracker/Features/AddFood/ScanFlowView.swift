@@ -7,6 +7,8 @@ struct ScanFlowView: View {
     @Environment(\.dismiss) private var dismiss
 
     let day: Date
+    /// A code the full-screen scanner already read, so this skips straight to the lookup.
+    let initialCode: String?
     let onNotFound: (String) -> Void
 
     private enum Stage {
@@ -16,8 +18,15 @@ struct ScanFlowView: View {
         case failed(String, barcode: String)
     }
 
-    @State private var stage = Stage.scanning
+    @State private var stage: Stage
     @State private var typedCode = ""
+
+    init(day: Date, initialCode: String? = nil, onNotFound: @escaping (String) -> Void) {
+        self.day = day
+        self.initialCode = initialCode
+        self.onNotFound = onNotFound
+        _stage = State(initialValue: initialCode.map { Stage.looking($0) } ?? .scanning)
+    }
 
     var body: some View {
         NavigationStack {
@@ -26,6 +35,9 @@ struct ScanFlowView: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
                     }
+                }
+                .task {
+                    if let initialCode, case .looking = stage { await lookUp(initialCode) }
                 }
         }
     }

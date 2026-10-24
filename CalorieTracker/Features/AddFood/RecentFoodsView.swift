@@ -38,6 +38,7 @@ struct RecentFoodsView: View {
                 }
             }
             .searchable(text: $search)
+            .themedList()
             .navigationTitle("Recent foods")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -48,4 +48,20 @@ struct DayMathTests {
         #expect(totals.map(\.kcal) == [800, 0, 200])
         #expect(totals.first?.day == date(21))
     }
+
+    @Test func streakCountsBackFromToday() {
+        let logged: Set<Date> = [date(20, 9), date(21, 13), date(22, 20), date(23, 8)]
+        #expect(DayMath.streak(loggedDays: logged, today: date(23, 21), calendar: calendar) == 4)
+    }
+
+    @Test func streakSurvivesTodayNotLoggedYet() {
+        let logged: Set<Date> = [date(21), date(22)]
+        #expect(DayMath.streak(loggedDays: logged, today: date(23, 10), calendar: calendar) == 2)
+    }
+
+    @Test func streakBreaksOnAMissedDay() {
+        let logged: Set<Date> = [date(19), date(20), date(22), date(23)]
+        #expect(DayMath.streak(loggedDays: logged, today: date(23), calendar: calendar) == 2)
+        #expect(DayMath.streak(loggedDays: [date(20)], today: date(23), calendar: calendar) == 0)
+    }
 }

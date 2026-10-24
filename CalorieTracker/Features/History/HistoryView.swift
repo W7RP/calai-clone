@@ -4,7 +4,6 @@ import SwiftUI
 
 struct HistoryView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
     @Query(sort: \DailyGoal.effectiveFrom, order: .reverse) private var goals: [DailyGoal]
     @Query(sort: \WeightEntry.date) private var weights: [WeightEntry]
     @Query(sort: \LogEntry.date) private var entries: [LogEntry]
@@ -24,86 +23,138 @@ struct HistoryView: View {
         let maintenance = plan.map(EnergyMath.maintenance)
         let start = days.first?.day ?? .now
         let weightPoints = weights.filter { $0.date >= start }
+        let streak = DayMath.streak(loggedDays: Set(kcalByDay.filter { $0.value > 0 }.keys))
 
         NavigationStack {
-            List {
-                Picker("Range", selection: $range) {
-                    Text("7 days").tag(7)
-                    Text("30 days").tag(30)
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-
-                Section {
-                    Chart {
-                        ForEach(days, id: \.day) { day in
-                            BarMark(x: .value("Day", day.day, unit: .day), y: .value("kcal", day.kcal))
-                                .foregroundStyle(targets.target(on: day.day).map { day.kcal > $0.kcal ? Color.red : Color.green } ?? .green)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Weight").font(.subheadline).foregroundStyle(.secondary)
+                            Text(weights.last.map { "\(NumberInput.format($0.kilograms)) kg" } ?? "–")
+                                .font(.title.bold())
+                                .monospacedDigit()
+                            Text(plans.first.map { "Goal \(NumberInput.format($0.targetKg)) kg" } ?? "No goal set")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("Log weight") { showingWeight = true }
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color(UIColor.systemBackground))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(Color.primary, in: .capsule)
+                                .padding(.top, 6)
                         }
-                        if let goal {
-                            RuleMark(y: .value("Goal", goal))
-                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                                .annotation(position: .top, alignment: .leading) {
-                                    Text("Goal").font(.caption2).foregroundStyle(.secondary)
-                                }
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .card()
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Day streak").font(.subheadline).foregroundStyle(.secondary)
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Image(systemName: "flame.fill")
+                                Text("\(streak)").monospacedDigit()
+                            }
+                            .font(.title.bold())
+                            Text(streak == 1 ? "day in a row" : "days in a row")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .card()
+                        .accessibilityElement(children: .combine)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    if weightPoints.count >= 2 {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Weight trend").font(.headline)
+                            Chart(weightPoints) { point in
+                                LineMark(x: .value("Day", point.date, unit: .day), y: .value("kg", point.kilograms))
+                                    .foregroundStyle(Color.primary)
+                                PointMark(x: .value("Day", point.date, unit: .day), y: .value("kg", point.kilograms))
+                                    .foregroundStyle(Color.primary)
+                            }
+                            .chartYScale(domain: .automatic(includesZero: false))
+                            .frame(height: 160)
+                            .accessibilityLabel("Weight trend")
+                        }
+                        .card()
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Goal pace").font(.headline)
+                        if let plan {
+                            GoalPace(plan: plan, recent: lastWeekAverage)
+                            Text("Based on the last 7 full days you logged and your estimated maintenance. Day-to-day weight swings 1-2 kg with water; the trend over weeks is what counts.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Set a weight goal in Settings to see where your eating is heading.")
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .frame(height: 200)
-                    .accessibilityLabel("Calories per day")
-                    LabeledContent("Average on logged days", value: "\(NumberInput.format(average, maxFractionDigits: 0)) kcal")
-                    LabeledContent("Days logged", value: "\(logged.count) of \(range)")
-                } header: {
-                    Text("Calories")
-                }
+                    .card()
 
-                Section {
-                    AdherenceCalendarView(kcalByDay: kcalByDay, targets: targets, maintenance: maintenance)
-                } header: {
-                    Text("Adherence")
-                } footer: {
-                    Text("Green: within 10% of that day's calorie goal. Red: further off. Days with nothing logged stay blank.")
-                }
-
-                Section {
-                    if let plan {
-                        GoalPace(plan: plan, recent: lastWeekAverage)
-                    } else {
-                        Text("Set a weight goal in Settings to see where your eating is heading.")
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Calories").font(.headline)
+                            Spacer()
+                            Picker("Range", selection: $range) {
+                                Text("7 days").tag(7)
+                                Text("30 days").tag(30)
+                            }
+                            .pickerStyle(.segmented)
+                            .fixedSize()
+                        }
+                        Chart {
+                            ForEach(days, id: \.day) { day in
+                                let over = targets.target(on: day.day).map { day.kcal > $0.kcal * (1 + AdherenceMath.tolerance) } ?? false
+                                BarMark(x: .value("Day", day.day, unit: .day), y: .value("kcal", day.kcal))
+                                    .foregroundStyle(over ? Color.primary.opacity(0.3) : Color.primary)
+                                    .cornerRadius(4)
+                            }
+                            if let goal {
+                                RuleMark(y: .value("Goal", goal))
+                                    .foregroundStyle(Color.secondary)
+                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                                    .annotation(position: .top, alignment: .leading) {
+                                        Text("Goal").font(.caption2).foregroundStyle(.secondary)
+                                    }
+                            }
+                        }
+                        .frame(height: 200)
+                        .accessibilityLabel("Calories per day")
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text("\(Format.kcal(average)) kcal").font(.headline).monospacedDigit()
+                                Text("Average on logged days").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing) {
+                                Text("\(logged.count) of \(range)").font(.headline).monospacedDigit()
+                                Text("Days logged").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Text("Faded bars are more than 10% over that day's goal.")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                } header: {
-                    Text("Goal pace")
-                } footer: {
-                    if plan != nil {
-                        Text("Based on the last 7 full days you logged and your estimated maintenance. Expect day-to-day weight to swing 1-2 kg with water; the trend over weeks is what counts.")
-                    }
-                }
+                    .card()
 
-                Section {
-                    if weightPoints.count >= 2 {
-                        Chart(weightPoints) { point in
-                            LineMark(x: .value("Day", point.date, unit: .day), y: .value("kg", point.kilograms))
-                            PointMark(x: .value("Day", point.date, unit: .day), y: .value("kg", point.kilograms))
-                        }
-                        .chartYScale(domain: .automatic(includesZero: false))
-                        .frame(height: 160)
-                        .accessibilityLabel("Weight trend")
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Adherence").font(.headline)
+                        AdherenceCalendarView(kcalByDay: kcalByDay, targets: targets, maintenance: maintenance)
+                        Text("Green: within 10% of that day's calorie goal. Red: further off. Days with nothing logged stay blank.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    if let last = weights.last {
-                        LabeledContent("Latest", value: "\(NumberInput.format(last.kilograms)) kg · \(last.date.formatted(date: .abbreviated, time: .omitted))")
-                    }
-                    Button("Log weight", systemImage: "scalemass") { showingWeight = true }
-                } header: {
-                    Text("Weight (optional)")
+                    .card()
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
             }
-            .navigationTitle("History")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
+            .pageBackground()
+            .navigationTitle("Progress")
             .sheet(isPresented: $showingWeight) {
                 WeightFormView()
                     .presentationDetents([.medium])

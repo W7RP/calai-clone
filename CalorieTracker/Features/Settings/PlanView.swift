@@ -6,7 +6,6 @@ struct PlanView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var plans: [GoalPlan]
-    @Query(sort: \DailyGoal.effectiveFrom, order: .reverse) private var goals: [DailyGoal]
     @Query(sort: \WeightEntry.date) private var weights: [WeightEntry]
 
     @State private var loaded = false
@@ -114,6 +113,7 @@ struct PlanView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("Weight goal")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -163,9 +163,23 @@ struct PlanView: View {
 
     private func save() {
         guard let inputs else { return }
+        PlanStore.save(inputs, in: context)
+        dismiss()
+    }
+}
+
+/// Saves a plan: updates the one GoalPlan row, logs a changed weight, and writes today's DailyGoal.
+enum PlanStore {
+    @MainActor
+    static func save(_ inputs: PlanInputs, in context: ModelContext) {
         let results = PlanCalculator.targets(inputs)
         let calendar = Calendar.current
         let birthYear = calendar.component(.year, from: .now) - inputs.age
+        let plans = (try? context.fetch(FetchDescriptor<GoalPlan>())) ?? []
+        let goals = (try? context.fetch(FetchDescriptor<DailyGoal>())) ?? []
+        var latestWeight = FetchDescriptor<WeightEntry>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        latestWeight.fetchLimit = 1
+        let lastKg = (try? context.fetch(latestWeight))?.first?.kilograms
 
         if let plan = plans.first {
             plan.update(from: inputs, birthYear: birthYear)
@@ -174,7 +188,7 @@ struct PlanView: View {
         }
 
         // A new current weight is logged too, so the trend and later estimates use it.
-        if abs((weights.last?.kilograms ?? 0) - inputs.weightKg) >= 0.05 {
+        if abs((lastKg ?? 0) - inputs.weightKg) >= 0.05 {
             context.insert(WeightEntry(date: .now, kilograms: inputs.weightKg))
         }
 
@@ -184,7 +198,6 @@ struct PlanView: View {
         }
         context.insert(DailyGoal(macros: results.average, effectiveFrom: today, training: results.training,
                                  rest: results.rest, trainingWeekdays: inputs.trainingDays))
-        dismiss()
     }
 }
 
@@ -251,8 +264,8 @@ struct WeekdayPicker: View {
                     Text(calendar.veryShortWeekdaySymbols[weekday - 1])
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 38)
-                        .background(isOn ? Color.accentColor : Color.secondary.opacity(0.15), in: Circle())
-                        .foregroundStyle(isOn ? Color.white : Color.primary)
+                        .background(isOn ? Color.primary : Color.secondary.opacity(0.15), in: Circle())
+                        .foregroundStyle(isOn ? Color(UIColor.systemBackground) : Color.primary)
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel(calendar.weekdaySymbols[weekday - 1])

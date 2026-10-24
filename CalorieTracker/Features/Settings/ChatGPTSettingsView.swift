@@ -51,6 +51,7 @@ struct ChatGPTSettingsView: View {
                 NavigationLink("Diagnostics (Phase 0 test screen)") { Phase0View() }
             }
         }
+        .themedList()
         .navigationTitle("ChatGPT")
         .disabled(model.isBusy)
         .task {
