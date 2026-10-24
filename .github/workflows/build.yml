@@ -1,0 +1,68 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    # macOS minutes count 10x on a private repo, so keep this job lean.
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build unsigned app
+        # AltStore re-signs with the free Apple ID on install, so CI doesn't sign.
+        run: |
+          xcodebuild build \
+            -project CalorieTracker.xcodeproj \
+            -scheme CalorieTracker \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            BUILD_COMMIT=${GITHUB_SHA::7} \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/CalorieTracker.app Payload/
+          zip -qr CalorieTracker-${{ github.run_number }}.ipa Payload
+
+      - name: Check the bundle
+        # Fails the run if the app is missing its binary or the build number didn't stamp.
+        # Results go out as annotations so they're readable from the PR checks page.
+        run: |
+          APP=Payload/CalorieTracker.app
+          pb() { /usr/libexec/PlistBuddy -c "Print :$1" "$APP/Info.plist" 2>&1; }
+          echo "::notice title=Bundle contents::$(ls "$APP" | tr '\n' ' ')"
+          echo "::notice title=Binary::$(lipo -info "$APP/CalorieTracker" 2>&1)"
+          echo "::notice title=Info.plist::id=$(pb CFBundleIdentifier) version=$(pb CFBundleVersion) commit=$(pb BuildCommit) minOS=$(pb MinimumOSVersion)"
+          echo "::notice title=ipa size::$(ls -la CalorieTracker-*.ipa)"
+          test -f "$APP/CalorieTracker"
+          test "$(pb CFBundleVersion)" = "${{ github.run_number }}"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: CalorieTracker-${{ github.run_number }}
+          path: CalorieTracker-${{ github.run_number }}.ipa
+          retention-days: 14
