@@ -308,3 +308,53 @@ struct Thumbnail: View {
         .accessibilityHidden(true)
     }
 }
+
+/// Saved meals in a row, each logged with one tap.
+struct QuickAddStrip: View {
+    let meals: [SavedMeal]
+    let onLog: (SavedMeal) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Saved meals")
+                .font(.title3.bold())
+                .padding(.top, 8)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(meals) { saved in
+                        Button {
+                            onLog(saved)
+                        } label: {
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(saved.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .lineLimit(1)
+                                    Text("\(Format.kcal(saved.totals.kcal)) kcal")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .monospacedDigit()
+                                }
+                                Image(systemName: "plus")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(Color(UIColor.systemBackground))
+                                    .frame(width: 26, height: 26)
+                                    .background(Color.primary, in: .circle)
+                            }
+                            .padding(.leading, 14)
+                            .padding(.trailing, 10)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: 220)
+                            .background(Theme.card, in: .capsule)
+                            .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Log \(saved.name), \(Format.kcal(saved.totals.kcal)) kcal")
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .scrollClipDisabled()
+        }
+    }
+}
