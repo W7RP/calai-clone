@@ -27,7 +27,7 @@ xcodegen generate
 open CalorieTracker.xcodeproj
 ```
 
-CI builds an unsigned `.ipa` on every push. See `docs/testing-on-iphone.md` for installing it.
+To install on an iPhone with a free Apple ID, see `docs/testing-on-iphone.md`.
 
 ## Status
-Early. Builds and passes tests in CI, not yet tested on a real device.
+Early. Runs on a real iPhone, and ChatGPT sign-in works. Other features are still being tested on device.
