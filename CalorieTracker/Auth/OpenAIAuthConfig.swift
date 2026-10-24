@@ -19,11 +19,12 @@ enum OpenAIAuthConfig {
         "http://127.0.0.1:\(port)\(callbackPath)"
     }
 
-    static func authorizeRequestURL(attempt: AuthAttempt, redirectURI: String, hostID: String,
+    // No ext_agent_host_id: auth.openai.com rejects it with invalid_authorize_request, and
+    // OpenAI's DevKit only sends it when a deployment opts in (sendHostId, off by default).
+    static func authorizeRequestURL(attempt: AuthAttempt, redirectURI: String,
                                     issuedClientID: String?) -> URL {
         var items = [
             URLQueryItem(name: "client_id", value: issuedClientID ?? registrationClientID),
-            URLQueryItem(name: "ext_agent_host_id", value: hostID),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "scope", value: scopes),

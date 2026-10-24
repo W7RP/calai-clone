@@ -31,7 +31,7 @@ struct AuthorizeURLTests {
     @Test func firstSignInRegistersDynamically() {
         let attempt = AuthAttempt.make()
         let url = OpenAIAuthConfig.authorizeRequestURL(attempt: attempt, redirectURI: "http://127.0.0.1:1455/auth/callback",
-                                                       hostID: "host-1", issuedClientID: nil)
+                                                       issuedClientID: nil)
         let q = query(url)
         #expect(q["client_id"] == "dynamic_agent_client")
         #expect(q["agent_name_hint"] == OpenAIAuthConfig.agentName)
@@ -39,12 +39,12 @@ struct AuthorizeURLTests {
         #expect(q["code_challenge"] == attempt.challenge)
         #expect(q["code_challenge_method"] == "S256")
         #expect(q["scope"] == OpenAIAuthConfig.scopes)
-        #expect(q["ext_agent_host_id"] == "host-1")
+        #expect(q["ext_agent_host_id"] == nil)
     }
 
     @Test func reauthorizationReusesIssuedClientAndDropsNameHint() {
         let url = OpenAIAuthConfig.authorizeRequestURL(attempt: .make(), redirectURI: "http://127.0.0.1:1455/auth/callback",
-                                                       hostID: "host-1", issuedClientID: "oaiapp_abc")
+                                                       issuedClientID: "oaiapp_abc")
         let q = query(url)
         #expect(q["client_id"] == "oaiapp_abc")
         #expect(q["agent_name_hint"] == nil)
