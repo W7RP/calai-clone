@@ -47,18 +47,9 @@ actor AuthSession {
         set { UserDefaults.standard.set(newValue, forKey: clientIDKey) }
     }
 
-    /// Stable per install, as `ext_agent_host_id` requires.
-    nonisolated static var hostID: String {
-        let key = "extAgentHostID"
-        if let existing = UserDefaults.standard.string(forKey: key) { return existing }
-        let new = UUID().uuidString
-        UserDefaults.standard.set(new, forKey: key)
-        return new
-    }
-
     func authorizeURL(attempt: AuthAttempt, redirectURI: String) -> URL {
         OpenAIAuthConfig.authorizeRequestURL(attempt: attempt, redirectURI: redirectURI,
-                                             hostID: Self.hostID, issuedClientID: tokens?.issuedClientID ?? Self.savedClientID)
+                                             issuedClientID: tokens?.issuedClientID ?? Self.savedClientID)
     }
 
     func complete(callback: AuthCallback, attempt: AuthAttempt, redirectURI: String) async throws {
