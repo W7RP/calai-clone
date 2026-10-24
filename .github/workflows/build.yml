@@ -26,8 +26,23 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
+      - name: Unit tests (simulator)
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          xcodebuild test \
+            -project CalorieTracker.xcodeproj \
+            -scheme CalorieTracker \
+            -destination "id=$UDID" \
+            -derivedDataPath build-test \
+            CODE_SIGNING_ALLOWED=NO > test.log 2>&1 || {
+              # Logs aren't always reachable from outside, so failures also go out as annotations.
+              grep -E "error:|✘| failed" test.log | head -30 | while IFS= read -r line; do echo "::error::$line"; done
+              exit 1
+            }
+          echo "::notice title=Tests::$(grep -E 'Test run with|Executed' test.log | tail -1)"
+
       - name: Build unsigned app
-        # AltStore re-signs with the free Apple ID on install, so CI doesn't sign.
+        # Whatever installs it (AltStore, Sideloadly) re-signs with the Apple ID, so CI doesn't sign.
         run: |
           xcodebuild build \
             -project CalorieTracker.xcodeproj \
@@ -40,7 +55,10 @@ jobs:
             BUILD_COMMIT=${GITHUB_SHA::7} \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" > build.log 2>&1 || {
+              grep -E "error:" build.log | sort -u | head -30 | while IFS= read -r line; do echo "::error::$line"; done
+              exit 1
+            }
 
       - name: Package .ipa
         run: |
