@@ -14,7 +14,7 @@ struct TodayView: View {
     @State private var scannerMode: FoodScannerView.Mode?
     @State private var scannedCode: ScannedCode?
     @State private var showingTypedScan = false
-    @State private var showingRecents = false
+    @State private var showingMyFoods = false
     @State private var showingDescribe = false
     @State private var barcodeNotFound: String?
     @State private var review: ReviewTarget?
@@ -82,8 +82,8 @@ struct TodayView: View {
             .sheet(isPresented: $showingTypedScan, onDismiss: openManualForMissingBarcode) {
                 ScanFlowView(day: day) { barcodeNotFound = $0 }
             }
-            .sheet(isPresented: $showingRecents) {
-                RecentFoodsView(day: day)
+            .sheet(isPresented: $showingMyFoods) {
+                MyFoodsView(day: day)
             }
             .sheet(isPresented: $showingDescribe) {
                 AIAddView(day: day)
@@ -109,7 +109,7 @@ struct TodayView: View {
 
     private var nothingPresented: Bool {
         !showingAddMenu && scannerMode == nil && scannedCode == nil && editor == nil && !showingTypedScan
-            && !showingRecents && !showingDescribe && review == nil
+            && !showingMyFoods && !showingDescribe && review == nil
     }
 
     private func runPendingAction() {
@@ -122,12 +122,12 @@ struct TodayView: View {
             if FoodScannerView.isAvailable { scannerMode = .barcode } else { showingTypedScan = true }
         case .describe:
             showingDescribe = true
-        case .recents:
-            showingRecents = true
+        case .myFoods:
+            showingMyFoods = true
         case .manual:
             editor = .new(day: day)
         case .copy(let meal):
-            copyFromPreviousDay(meal)
+            LogActions.copyPreviousDay(to: day, meal: meal, in: context)
         }
     }
 
@@ -137,23 +137,14 @@ struct TodayView: View {
             editor = .new(day: day, barcode: code)
         }
     }
+}
 
-    /// Duplicates the previous day's entries for one meal onto the day being viewed.
-    private func copyFromPreviousDay(_ meal: Meal) {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: day)
-        guard let previous = calendar.date(byAdding: .day, value: -1, to: start) else { return }
-        let mealRaw = meal.rawValue
-        let descriptor = FetchDescriptor<LogEntry>(
-            predicate: #Predicate { $0.date >= previous && $0.date < start && $0.mealRaw == mealRaw },
-            sortBy: [SortDescriptor(\.date)])
-        for entry in (try? context.fetch(descriptor)) ?? [] {
-            context.insert(LogEntry(date: DayMath.move(entry.date, toDay: day), meal: meal, foodName: entry.foodName,
-                                    grams: entry.grams, macros: entry.macros, source: entry.source,
-                                    foodItem: entry.foodItem, aiConfidence: entry.aiConfidence,
-                                    thumbnail: entry.thumbnail))
-        }
-    }
+/// Foods waiting for a name before they're saved as a meal.
+private struct PendingSave {
+    let entries: [LogEntry]
+    let meal: Meal
+
+    var suggestedName: String { SavedMealNaming.suggestion(for: entries.map(\.foodName)) }
 }
 
 private struct ScannedCode: Identifiable {
@@ -249,7 +240,11 @@ private struct DayLog: View {
     @Query private var entries: [LogEntry]
     @Query(sort: \DailyGoal.effectiveFrom, order: .reverse) private var goals: [DailyGoal]
     @Query private var marks: [TrainingDayMark]
+    @Query(sort: \SavedMeal.lastUsed, order: .reverse) private var savedMeals: [SavedMeal]
     @Binding var editor: EntryEditor?
+    @State private var saving: PendingSave?
+    @State private var mealName = ""
+    @State private var quickLogged = 0
     let day: Date
     let onReview: (UUID) -> Void
 
@@ -285,6 +280,13 @@ private struct DayLog: View {
                                                set: { setTraining($0, schedule: goal.trainingWeekdays) }))
             }
 
+            if !savedMeals.isEmpty {
+                QuickAddStrip(meals: Array(savedMeals.prefix(8))) { saved in
+                    withAnimation { _ = LogActions.log(saved, on: day, in: context) }
+                    quickLogged += 1
+                }
+            }
+
             Text("Food log")
                 .font(.title3.bold())
                 .padding(.top, 8)
@@ -304,6 +306,21 @@ private struct DayLog: View {
                         Spacer()
                         Text("\(Format.kcal(Macros.total(items.map(\.macros)).kcal)) kcal")
                             .monospacedDigit()
+                        Menu {
+                            Button("Save as meal", systemImage: "bookmark") {
+                                askToSave(items, meal: meal)
+                            }
+                            if !isToday {
+                                Button("Log again today", systemImage: "arrow.clockwise") {
+                                    for entry in items { LogActions.relog(entry, on: .now, in: context) }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .frame(width: 32, height: 24)
+                                .contentShape(.rect)
+                        }
+                        .accessibilityLabel("\(meal.title) options")
                     }
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -317,6 +334,12 @@ private struct DayLog: View {
                         .buttonStyle(.plain)
                         .contextMenu {
                             Button("Edit", systemImage: "pencil") { editor = .edit(entry) }
+                            Button(isToday ? "Log again" : "Log again today", systemImage: "arrow.clockwise") {
+                                withAnimation { _ = LogActions.relog(entry, on: .now, in: context) }
+                            }
+                            Button("Save as meal", systemImage: "bookmark") {
+                                askToSave([entry], meal: meal)
+                            }
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 withAnimation { context.delete(entry) }
                             }
@@ -341,6 +364,29 @@ private struct DayLog: View {
                 .card(padding: 28)
             }
         }
+        .sensoryFeedback(.success, trigger: quickLogged)
+        .alert("Save as meal", isPresented: Binding(get: { saving != nil }, set: { if !$0 { saving = nil } })) {
+            TextField("Name", text: $mealName)
+            Button("Cancel", role: .cancel) { saving = nil }
+            Button("Save") {
+                if let saving {
+                    let name = mealName.trimmingCharacters(in: .whitespaces)
+                    LogActions.saveMeal(named: name.isEmpty ? saving.suggestedName : name, meal: saving.meal,
+                                        entries: saving.entries, in: context)
+                }
+                saving = nil
+            }
+        } message: {
+            Text("Log it again later with one tap from Home or Saved & recent.")
+        }
+    }
+
+    private var isToday: Bool { Calendar.current.isDateInToday(day) }
+
+    private func askToSave(_ entries: [LogEntry], meal: Meal) {
+        let pending = PendingSave(entries: entries, meal: meal)
+        mealName = pending.suggestedName
+        saving = pending
     }
 
     /// Marks this day by hand. Matching the weekly schedule again just removes the mark.
@@ -355,5 +401,5 @@ private struct DayLog: View {
 #Preview {
     TodayView()
         .environment(AnalysisCenter())
-        .modelContainer(for: [FoodItem.self, LogEntry.self, DailyGoal.self, WeightEntry.self, GoalPlan.self, TrainingDayMark.self], inMemory: true)
+        .modelContainer(for: AppModels.all, inMemory: true)
 }

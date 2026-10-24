@@ -10,7 +10,8 @@ Log what I eat in a few seconds, get a calorie and macro total for the day, and 
 
 ## Day view
 - Calorie total vs. goal, macro totals, list of entries grouped by meal (breakfast, lunch, dinner, snack).
-- Edit or delete any entry. Copy yesterday's meal.
+- Edit or delete any entry. Copy yesterday's meal or whole day.
+- Save a meal from the log and re-log it with one tap from Home. Log any entry again from its long-press menu.
 - Weekly trend (calories and, optionally, weight) with Swift Charts.
 
 ## Goals

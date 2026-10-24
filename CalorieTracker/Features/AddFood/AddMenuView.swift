@@ -1,8 +1,9 @@
 import SwiftUI
 
 enum AddAction: Equatable {
-    case scanFood, barcode, describe, recents, manual
-    case copy(Meal)
+    case scanFood, barcode, describe, myFoods, manual
+    /// Yesterday's food for one meal, or the whole day when nil.
+    case copy(Meal?)
 }
 
 /// The sheet behind the + button: one big tile per way of logging.
@@ -20,9 +21,11 @@ struct AddMenuView: View {
                 Tile(title: "Scan food", symbol: "camera.viewfinder") { onSelect(.scanFood) }
                 Tile(title: "Describe a meal", symbol: "text.bubble") { onSelect(.describe) }
                 Tile(title: "Barcode", symbol: "barcode.viewfinder") { onSelect(.barcode) }
-                Tile(title: "Recent foods", symbol: "clock.arrow.circlepath") { onSelect(.recents) }
+                Tile(title: "Saved & recent", symbol: "bookmark") { onSelect(.myFoods) }
                 Tile(title: "Enter manually", symbol: "square.and.pencil") { onSelect(.manual) }
                 Menu {
+                    Button("Whole day") { onSelect(.copy(nil)) }
+                    Divider()
                     ForEach(Meal.allCases) { meal in
                         Button(meal.title) { onSelect(.copy(meal)) }
                     }

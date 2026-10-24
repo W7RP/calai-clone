@@ -11,6 +11,6 @@ struct CalorieTrackerApp: App {
                 .environment(analysis)
                 .tint(.primary)
         }
-        .modelContainer(for: [FoodItem.self, LogEntry.self, DailyGoal.self, WeightEntry.self, GoalPlan.self, TrainingDayMark.self])
+        .modelContainer(for: AppModels.all)
     }
 }
