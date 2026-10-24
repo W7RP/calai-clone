@@ -19,10 +19,10 @@ struct HistoryView: View {
         let average = logged.isEmpty ? 0 : logged.map(\.kcal).reduce(0, +) / Double(logged.count)
         let targets = DayTargets(goals: goals, marks: marks)
         let goal = targets.goal(on: .now)?.kcal
-        let plan = plans.first.flatMap { plan in weights.last.map { plan.inputs(weightKg: $0.kilograms) } }
+        let trend = WeightTrend.points(weights.map { ($0.date, $0.kilograms) })
+        // The trend rather than the last weigh-in, so one salty dinner doesn't move maintenance.
+        let plan = plans.first.flatMap { plan in trend.last.map { plan.inputs(weightKg: $0.trend) } }
         let maintenance = plan.map(EnergyMath.maintenance)
-        let start = days.first?.day ?? .now
-        let weightPoints = weights.filter { $0.date >= start }
         let streak = DayMath.streak(loggedDays: Set(kcalByDay.filter { $0.value > 0 }.keys))
 
         NavigationStack {
@@ -44,6 +44,11 @@ struct HistoryView: View {
                                 .padding(.vertical, 8)
                                 .background(Color.primary, in: .capsule)
                                 .padding(.top, 6)
+                            if !weights.isEmpty {
+                                NavigationLink("All weigh-ins") { WeighInsView() }
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.top, 2)
+                            }
                         }
                         .frame(maxHeight: .infinity, alignment: .top)
                         .card()
@@ -65,20 +70,8 @@ struct HistoryView: View {
                     }
                     .fixedSize(horizontal: false, vertical: true)
 
-                    if weightPoints.count >= 2 {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Weight trend").font(.headline)
-                            Chart(weightPoints) { point in
-                                LineMark(x: .value("Day", point.date, unit: .day), y: .value("kg", point.kilograms))
-                                    .foregroundStyle(Color.primary)
-                                PointMark(x: .value("Day", point.date, unit: .day), y: .value("kg", point.kilograms))
-                                    .foregroundStyle(Color.primary)
-                            }
-                            .chartYScale(domain: .automatic(includesZero: false))
-                            .frame(height: 160)
-                            .accessibilityLabel("Weight trend")
-                        }
-                        .card()
+                    if trend.count >= 2 {
+                        WeightTrendCard(points: trend, goalKg: plans.first?.targetKg)
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
