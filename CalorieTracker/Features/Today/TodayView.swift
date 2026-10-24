@@ -1,88 +1,141 @@
 import SwiftData
 import SwiftUI
 
+/// Home: the week strip, what's left today, and every food logged, with one + button for adding more.
 struct TodayView: View {
     @Environment(\.modelContext) private var context
+    @Environment(AnalysisCenter.self) private var analysis
+    @Query private var allEntries: [LogEntry]
+
     @State private var day = Date.now
     @State private var editor: EntryEditor?
-    @State private var showingSettings = false
-    @State private var showingScanner = false
+    @State private var showingAddMenu = false
+    @State private var pendingAction: AddAction?
+    @State private var scannerMode: FoodScannerView.Mode?
+    @State private var scannedCode: ScannedCode?
+    @State private var showingTypedScan = false
     @State private var showingRecents = false
+    @State private var showingDescribe = false
     @State private var barcodeNotFound: String?
-    @State private var aiSheet: AISheet?
-    @State private var showingHistory = false
+    @State private var review: ReviewTarget?
 
     var body: some View {
+        let loggedDays = Set(allEntries.map { Calendar.current.startOfDay(for: $0.date) })
+
         NavigationStack {
-            DayLog(day: day, editor: $editor)
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Settings", systemImage: "gearshape") { showingSettings = true }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HomeHeader(streak: DayMath.streak(loggedDays: loggedDays),
+                               showsToday: !Calendar.current.isDateInToday(day)) { day = .now }
+                    WeekStrip(selection: $day, loggedDays: loggedDays)
+                    DayLog(day: day, editor: $editor) { review = ReviewTarget(id: $0) }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 96)
+            }
+            .pageBackground()
+            .toolbar(.hidden, for: .navigationBar)
+            .overlay(alignment: .bottomTrailing) {
+                Button {
+                    showingAddMenu = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2.bold())
+                        .foregroundStyle(Color(UIColor.systemBackground))
+                        .frame(width: 62, height: 62)
+                        .background(Color.primary, in: .circle)
+                        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+                }
+                .accessibilityLabel("Add food")
+                .padding(20)
+            }
+            .sheet(isPresented: $showingAddMenu, onDismiss: runPendingAction) {
+                AddMenuView { action in
+                    pendingAction = action
+                    showingAddMenu = false
+                }
+                .presentationDetents([.height(380)])
+                .presentationCornerRadius(32)
+            }
+            .fullScreenCover(item: $scannerMode, onDismiss: {
+                // Two sheets can't overlap, so the barcode lookup opens once the camera is gone.
+                if let code = pendingCode {
+                    pendingCode = nil
+                    scannedCode = ScannedCode(code: code)
+                }
+            }) { mode in
+                FoodScannerView(startIn: mode) { result in
+                    switch result {
+                    case .photo(let data):
+                        analysis.start(day: day, description: "", photo: data)
+                    case .barcode(let code):
+                        pendingCode = code
                     }
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("History", systemImage: "chart.bar") { showingHistory = true }
-                    }
-                    ToolbarItemGroup(placement: .bottomBar) {
-                        Button("Previous day", systemImage: "chevron.left") { shift(by: -1) }
-                        Spacer()
-                        if !Calendar.current.isDateInToday(day) {
-                            Button("Today") { day = .now }
-                            Spacer()
-                        }
-                        Button("Next day", systemImage: "chevron.right") { shift(by: 1) }
-                            .disabled(Calendar.current.isDateInToday(day))
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu("Add food", systemImage: "plus") {
-                            Button("Photo", systemImage: "camera") { aiSheet = .photo }
-                            Button("Describe it", systemImage: "text.bubble") { aiSheet = .text }
-                            Divider()
-                            Button("Scan barcode", systemImage: "barcode.viewfinder") { showingScanner = true }
-                            Button("Recent foods", systemImage: "clock") { showingRecents = true }
-                            Button("Enter manually", systemImage: "square.and.pencil") { editor = .new(day: day) }
-                            Divider()
-                            Menu("Copy from yesterday", systemImage: "doc.on.doc") {
-                                ForEach(Meal.allCases) { meal in
-                                    Button(meal.title) { copyFromPreviousDay(meal) }
-                                }
-                            }
-                        }
-                    }
                 }
-                .sheet(item: $editor) { editor in
-                    EntryFormView(editor: editor)
-                }
-                .sheet(isPresented: $showingSettings) {
-                    SettingsView()
-                }
-                .sheet(isPresented: $showingScanner, onDismiss: {
-                    // Open manual entry only after the scanner sheet is gone; two sheets can't overlap.
-                    if let code = barcodeNotFound {
-                        barcodeNotFound = nil
-                        editor = .new(day: day, barcode: code)
-                    }
-                }) {
-                    ScanFlowView(day: day) { barcodeNotFound = $0 }
-                }
-                .sheet(isPresented: $showingRecents) {
-                    RecentFoodsView(day: day)
-                }
-                .sheet(item: $aiSheet) { kind in
-                    AIAddView(day: day, startWithCamera: kind == .photo)
-                }
-                .sheet(isPresented: $showingHistory) {
-                    HistoryView()
-                }
+            }
+            .sheet(item: $editor) { editor in
+                EntryFormView(editor: editor)
+            }
+            .sheet(item: $scannedCode, onDismiss: openManualForMissingBarcode) { scanned in
+                ScanFlowView(day: day, initialCode: scanned.code) { barcodeNotFound = $0 }
+            }
+            .sheet(isPresented: $showingTypedScan, onDismiss: openManualForMissingBarcode) {
+                ScanFlowView(day: day) { barcodeNotFound = $0 }
+            }
+            .sheet(isPresented: $showingRecents) {
+                RecentFoodsView(day: day)
+            }
+            .sheet(isPresented: $showingDescribe) {
+                AIAddView(day: day)
+            }
+            .sheet(item: $review) { target in
+                ReviewSheet(id: target.id) { review = nil }
+            }
+            .onChange(of: readyJobs) { old, new in
+                // Open the review as soon as an estimate lands, unless something else is on screen.
+                guard let first = new.first(where: { !old.contains($0) }), nothingPresented else { return }
+                review = ReviewTarget(id: first)
+            }
         }
     }
 
-    private var title: String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "Today" }
-        if calendar.isDateInYesterday(day) { return "Yesterday" }
-        return day.formatted(.dateTime.weekday(.wide).month().day())
+    @State private var pendingCode: String?
+
+    private var readyJobs: [UUID] {
+        analysis.jobs.compactMap { job in
+            if case .ready = job.state { job.id } else { nil }
+        }
+    }
+
+    private var nothingPresented: Bool {
+        !showingAddMenu && scannerMode == nil && scannedCode == nil && editor == nil && !showingTypedScan
+            && !showingRecents && !showingDescribe && review == nil
+    }
+
+    private func runPendingAction() {
+        guard let action = pendingAction else { return }
+        pendingAction = nil
+        switch action {
+        case .scanFood:
+            if FoodScannerView.isAvailable { scannerMode = .food } else { showingDescribe = true }
+        case .barcode:
+            if FoodScannerView.isAvailable { scannerMode = .barcode } else { showingTypedScan = true }
+        case .describe:
+            showingDescribe = true
+        case .recents:
+            showingRecents = true
+        case .manual:
+            editor = .new(day: day)
+        case .copy(let meal):
+            copyFromPreviousDay(meal)
+        }
+    }
+
+    private func openManualForMissingBarcode() {
+        if let code = barcodeNotFound {
+            barcodeNotFound = nil
+            editor = .new(day: day, barcode: code)
+        }
     }
 
     /// Duplicates the previous day's entries for one meal onto the day being viewed.
@@ -97,18 +150,50 @@ struct TodayView: View {
         for entry in (try? context.fetch(descriptor)) ?? [] {
             context.insert(LogEntry(date: DayMath.move(entry.date, toDay: day), meal: meal, foodName: entry.foodName,
                                     grams: entry.grams, macros: entry.macros, source: entry.source,
-                                    foodItem: entry.foodItem, aiConfidence: entry.aiConfidence))
+                                    foodItem: entry.foodItem, aiConfidence: entry.aiConfidence,
+                                    thumbnail: entry.thumbnail))
         }
-    }
-
-    private func shift(by days: Int) {
-        day = Calendar.current.date(byAdding: .day, value: days, to: day) ?? day
     }
 }
 
-enum AISheet: String, Identifiable {
-    case photo, text
-    var id: String { rawValue }
+private struct ScannedCode: Identifiable {
+    let code: String
+    var id: String { code }
+}
+
+private struct ReviewTarget: Identifiable {
+    let id: UUID
+}
+
+/// The review screen for a finished estimate, in its own navigation stack.
+private struct ReviewSheet: View {
+    @Environment(AnalysisCenter.self) private var analysis
+    let id: UUID
+    let onClose: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            if let job = analysis.job(id), case .ready(let estimate) = job.state {
+                ReviewView(estimate: estimate, day: job.day, photo: job.jpeg, thumbnail: job.thumbnail) {
+                    analysis.remove(id)
+                    onClose()
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Later") { onClose() }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Discard", role: .destructive) {
+                            analysis.remove(id)
+                            onClose()
+                        }
+                    }
+                }
+            } else {
+                ContentUnavailableView("Nothing to review", systemImage: "sparkles")
+            }
+        }
+    }
 }
 
 /// What the entry sheet is editing: a new entry for a day, or an existing one.
@@ -124,17 +209,53 @@ enum EntryEditor: Identifiable {
     }
 }
 
+private struct HomeHeader: View {
+    let streak: Int
+    let showsToday: Bool
+    let onToday: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "flame.fill")
+                .font(.title2)
+            Text("EasyCal")
+                .font(.title2.bold())
+            Spacer()
+            if showsToday {
+                Button(action: onToday) { Chip(text: "Today", symbol: "arrow.uturn.left") }
+                    .buttonStyle(.plain)
+            }
+            HStack(spacing: 4) {
+                Image(systemName: "flame.fill")
+                Text("\(streak)")
+                    .monospacedDigit()
+            }
+            .font(.subheadline.bold())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Theme.card, in: .capsule)
+            .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(streak) day streak")
+        }
+        .padding(.top, 8)
+    }
+}
+
 /// The list for one day. Separate from TodayView so its @Query can be rebuilt when the day changes.
 private struct DayLog: View {
     @Environment(\.modelContext) private var context
+    @Environment(AnalysisCenter.self) private var analysis
     @Query private var entries: [LogEntry]
     @Query(sort: \DailyGoal.effectiveFrom, order: .reverse) private var goals: [DailyGoal]
     @Query private var marks: [TrainingDayMark]
     @Binding var editor: EntryEditor?
     let day: Date
+    let onReview: (UUID) -> Void
 
-    init(day: Date, editor: Binding<EntryEditor?>) {
+    init(day: Date, editor: Binding<EntryEditor?>, onReview: @escaping (UUID) -> Void) {
         self.day = day
+        self.onReview = onReview
         _editor = editor
         let start = Calendar.current.startOfDay(for: day)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? start
@@ -147,52 +268,81 @@ private struct DayLog: View {
         let targets = DayTargets(goals: goals, marks: marks)
         let goal = targets.goal(on: day)
         let isTraining = targets.isTraining(day)
+        let target = goal?.target(trainingDay: isTraining)
+        let jobs = analysis.jobs.filter { Calendar.current.isDate($0.day, inSameDayAs: day) }
 
-        List {
-            Section {
-                DaySummary(totals: totals, goal: goal?.target(trainingDay: isTraining),
-                           kind: goal?.isCycling == true ? (isTraining ? "Gym day" : "Rest day") : nil)
-                if let goal, goal.isCycling {
-                    Toggle("Gym day", systemImage: "dumbbell",
-                           isOn: Binding(get: { isTraining }, set: { setTraining($0, schedule: goal.trainingWeekdays) }))
+        VStack(alignment: .leading, spacing: 16) {
+            CalorieCard(eaten: totals.kcal, goal: target?.kcal)
+
+            HStack(spacing: 10) {
+                ForEach(MacroKind.allCases) { kind in
+                    MacroCard(kind: kind, eaten: kind.value(totals), goal: target.map(kind.value))
                 }
+            }
+
+            if let goal, goal.isCycling {
+                GymDayCard(isTraining: Binding(get: { isTraining },
+                                               set: { setTraining($0, schedule: goal.trainingWeekdays) }))
+            }
+
+            Text("Food log")
+                .font(.title3.bold())
+                .padding(.top, 8)
+
+            ForEach(jobs) { job in
+                AnalyzingCard(job: job,
+                              onReview: { onReview(job.id) },
+                              onRetry: { analysis.retry(job.id) },
+                              onDiscard: { withAnimation { analysis.remove(job.id) } })
             }
 
             ForEach(Meal.allCases) { meal in
                 let items = entries.filter { $0.meal == meal }
                 if !items.isEmpty {
-                    Section {
-                        ForEach(items) { entry in
-                            Button {
-                                editor = .edit(entry)
-                            } label: {
-                                EntryRow(entry: entry)
+                    HStack {
+                        Text(meal.title)
+                        Spacer()
+                        Text("\(Format.kcal(Macros.total(items.map(\.macros)).kcal)) kcal")
+                            .monospacedDigit()
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    ForEach(items) { entry in
+                        Button {
+                            editor = .edit(entry)
+                        } label: {
+                            FoodCard(entry: entry)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Edit", systemImage: "pencil") { editor = .edit(entry) }
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                withAnimation { context.delete(entry) }
                             }
-                            .tint(.primary)
-                        }
-                        .onDelete { offsets in
-                            for index in offsets { context.delete(items[index]) }
-                        }
-                    } header: {
-                        HStack {
-                            Text(meal.title)
-                            Spacer()
-                            Text("\(NumberInput.format(Macros.total(items.map(\.macros)).kcal, maxFractionDigits: 0)) kcal")
                         }
                     }
                 }
             }
 
-            if entries.isEmpty {
-                ContentUnavailableView("Nothing logged", systemImage: "fork.knife",
-                                       description: Text("Tap + to add what you ate."))
-                    .listRowBackground(Color.clear)
+            if entries.isEmpty && jobs.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "fork.knife")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text("Nothing logged yet")
+                        .font(.headline)
+                    Text("Tap + to snap a photo of your meal, scan a barcode or describe what you ate.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .card(padding: 28)
             }
         }
     }
-}
 
-extension DayLog {
     /// Marks this day by hand. Matching the weekly schedule again just removes the mark.
     private func setTraining(_ isTraining: Bool, schedule: WeekdaySet) {
         for mark in marks { context.delete(mark) }
@@ -202,98 +352,8 @@ extension DayLog {
     }
 }
 
-private struct EntryRow: View {
-    let entry: LogEntry
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.foodName)
-                Text("\(NumberInput.format(entry.grams, maxFractionDigits: 0)) g · P \(NumberInput.format(entry.protein)) · C \(NumberInput.format(entry.carbs)) · F \(NumberInput.format(entry.fat))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text("\(NumberInput.format(entry.kcal, maxFractionDigits: 0)) kcal")
-                .monospacedDigit()
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct DaySummary: View {
-    let totals: Macros
-    let goal: Macros?
-    /// "Gym day" / "Rest day" when the goal cycles.
-    var kind: String?
-
-    var body: some View {
-        VStack(spacing: 12) {
-            if let goal, goal.kcal > 0 {
-                let remaining = goal.kcal - totals.kcal
-                Gauge(value: min(totals.kcal, goal.kcal), in: 0...goal.kcal) {
-                    Text("Calories")
-                } currentValueLabel: {
-                    Text(NumberInput.format(totals.kcal, maxFractionDigits: 0))
-                }
-                .gaugeStyle(.accessoryCircularCapacity)
-                .scaleEffect(1.6)
-                .padding(.vertical, 16)
-                .tint(remaining < 0 ? .red : .green)
-                Text(remaining >= 0
-                     ? "\(NumberInput.format(remaining, maxFractionDigits: 0)) kcal left of \(NumberInput.format(goal.kcal, maxFractionDigits: 0))"
-                     : "\(NumberInput.format(-remaining, maxFractionDigits: 0)) kcal over \(NumberInput.format(goal.kcal, maxFractionDigits: 0))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                if let kind {
-                    Text("\(kind) target")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                Text("\(NumberInput.format(totals.kcal, maxFractionDigits: 0)) kcal")
-                    .font(.largeTitle.bold())
-                Text("Set a daily goal in Settings")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                MacroColumn(name: "Protein", value: totals.protein, goal: goal?.protein)
-                MacroColumn(name: "Carbs", value: totals.carbs, goal: goal?.carbs)
-                MacroColumn(name: "Fat", value: totals.fat, goal: goal?.fat)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-    }
-}
-
-private struct MacroColumn: View {
-    let name: String
-    let value: Double
-    let goal: Double?
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(name)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text("\(NumberInput.format(value, maxFractionDigits: 0)) g")
-                .font(.headline)
-                .monospacedDigit()
-            if let goal, goal > 0 {
-                ProgressView(value: min(value, goal), total: goal)
-                Text("of \(NumberInput.format(goal, maxFractionDigits: 0)) g")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
 #Preview {
     TodayView()
+        .environment(AnalysisCenter())
         .modelContainer(for: [FoodItem.self, LogEntry.self, DailyGoal.self, WeightEntry.self, GoalPlan.self, TrainingDayMark.self], inMemory: true)
 }

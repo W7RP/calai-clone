@@ -43,6 +43,7 @@ struct AIProviderSettingsView: View {
                 Text("Sends one short text request. Photos and descriptions you log go to the provider you pick, under your own account. Keys stay in this phone's Keychain.")
             }
         }
+        .themedList()
         .navigationTitle("AI provider")
         .onChange(of: model.provider) { _, new in model.select(new) }
         .overlay {

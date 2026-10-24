@@ -52,6 +52,7 @@ struct FoodAmountView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("How much?")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

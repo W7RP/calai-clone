@@ -5,10 +5,10 @@ No one should have to pay for yet another subscription.
 Snap a photo of your meal, scan a barcode, or type what you ate, and get calories and macros. Everything the paid AI calorie apps do, but open source: just hook up your own AI.
 
 <p>
-  <img src="docs/screenshots/today.png" width="200" alt="Today view with calorie ring and macros">
-  <img src="docs/screenshots/review.png" width="200" alt="Reviewing an AI estimate before saving">
-  <img src="docs/screenshots/barcode.png" width="200" alt="Logging a scanned product">
-  <img src="docs/screenshots/history.png" width="200" alt="Calorie and weight history">
+  <img src="docs/screenshots/home.png" width="200" alt="Home with calories left, macro rings and the food log">
+  <img src="docs/screenshots/scan.png" width="200" alt="Full-screen camera for meals, barcodes and labels">
+  <img src="docs/screenshots/review.png" width="200" alt="Reviewing an AI estimate before logging">
+  <img src="docs/screenshots/plan.png" width="200" alt="Daily plan worked out from the setup questions">
 </p>
 
 ## Bring your own AI

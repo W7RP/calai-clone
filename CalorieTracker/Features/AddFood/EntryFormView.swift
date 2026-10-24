@@ -59,6 +59,7 @@ struct EntryFormView: View {
                     }
                 }
             }
+            .themedList()
             .navigationTitle(isEditing ? "Edit entry" : "Add food")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

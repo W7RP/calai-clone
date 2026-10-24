@@ -18,4 +18,22 @@ enum DayMath {
             calendar.date(byAdding: .day, value: -offset, to: end).map { ($0, sums[$0] ?? 0) }
         }
     }
+
+    /// Days in a row with something logged, counting back from today. Today not being logged yet
+    /// doesn't break the streak until the day is over, so it counts back from yesterday instead.
+    static func streak(loggedDays: Set<Date>, today: Date = .now, calendar: Calendar = .current) -> Int {
+        let days = Set(loggedDays.map { calendar.startOfDay(for: $0) })
+        var day = calendar.startOfDay(for: today)
+        if !days.contains(day) {
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: day) else { return 0 }
+            day = yesterday
+        }
+        var count = 0
+        while days.contains(day) {
+            count += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: day) else { break }
+            day = previous
+        }
+        return count
+    }
 }

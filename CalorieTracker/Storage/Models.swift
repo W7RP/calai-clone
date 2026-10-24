@@ -79,6 +79,8 @@ final class LogEntry {
     var sourceRaw: String
     var foodItem: FoodItem?
     var aiConfidence: Double?
+    /// Small JPEG of the meal photo, shown on the food card. Only set for photo logs.
+    var thumbnail: Data?
 
     var meal: Meal {
         get { Meal(rawValue: mealRaw) ?? .snack }
@@ -98,7 +100,7 @@ final class LogEntry {
     }
 
     init(date: Date, meal: Meal, foodName: String, grams: Double, macros: Macros,
-         source: FoodSource, foodItem: FoodItem? = nil, aiConfidence: Double? = nil) {
+         source: FoodSource, foodItem: FoodItem? = nil, aiConfidence: Double? = nil, thumbnail: Data? = nil) {
         id = UUID()
         self.date = date
         mealRaw = meal.rawValue
@@ -111,6 +113,7 @@ final class LogEntry {
         sourceRaw = source.rawValue
         self.foodItem = foodItem
         self.aiConfidence = aiConfidence
+        self.thumbnail = thumbnail
     }
 }
 

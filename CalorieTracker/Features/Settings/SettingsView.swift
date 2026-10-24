@@ -2,15 +2,35 @@ import SwiftData
 import SwiftUI
 
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @Query(sort: \LogEntry.date) private var entries: [LogEntry]
+    @Query(sort: \DailyGoal.effectiveFrom, order: .reverse) private var goals: [DailyGoal]
+    @AppStorage(Onboarding.doneKey) private var onboarded = true
 
     var body: some View {
         NavigationStack {
             Form {
+                if let goal = GoalSelection.active(goals, on: .now, effectiveFrom: \.effectiveFrom) {
+                    Section {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Daily goal").font(.subheadline).foregroundStyle(.secondary)
+                            Label("\(Format.kcal(goal.kcal)) kcal", systemImage: "flame.fill")
+                                .font(.title2.bold())
+                            HStack(spacing: 16) {
+                                ForEach(MacroKind.allCases) { kind in
+                                    Label(Format.grams(kind.value(goal.macros)), systemImage: kind.symbol)
+                                }
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
                 Section {
                     NavigationLink("Weight goal and activity") { PlanView() }
                     NavigationLink("Set daily goal by hand") { GoalsView() }
+                    Button("Redo the setup questions") { onboarded = false }
                 } header: {
                     Text("Goals")
                 } footer: {
@@ -32,13 +52,9 @@ struct SettingsView: View {
                     Text("Everything stays on this phone. Export is the only way data leaves it, apart from AI requests.")
                 }
             }
+            .themedList()
+            .tint(.primary)
             .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
         }
     }
 }
@@ -77,6 +93,7 @@ struct GoalsView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("Daily goal")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
