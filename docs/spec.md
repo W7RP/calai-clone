@@ -29,6 +29,10 @@ Log what I eat in a few seconds, get a calorie and macro total for the day, and 
 - The prompt asks the model to say when it's guessing and to use label values when a label is visible.
 - Failures (plan cap reached, token expired, no network) show a clear message and leave manual entry working. The app is usable with no AI at all.
 
+## Coach
+- A Coach tab answers questions such as "what should I eat to hit my protein tonight" with the provider chosen in Settings.
+- Each question sends today's targets, what's logged today, the last 7 days' average, the weight trend and goal, and saved meal names. Nothing else, and the chat isn't stored.
+
 ## Non-goals
 App Store release, multi-user, cloud sync, social features, meal plans, a backend of any kind.
 
