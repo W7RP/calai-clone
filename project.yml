@@ -18,7 +18,7 @@ targets:
     info:
       path: CalorieTracker/Info.plist
       properties:
-        CFBundleDisplayName: Calories
+        CFBundleDisplayName: EasyCal
         # XcodeGen otherwise writes a literal "1" here, which ignores the CI build number.
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -37,6 +37,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.w7rp.calorietracker
         TARGETED_DEVICE_FAMILY: "1"
         BUILD_COMMIT: local
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   CalorieTrackerTests:
     type: bundle.unit-test
     platform: iOS

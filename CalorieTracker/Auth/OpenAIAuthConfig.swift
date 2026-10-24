@@ -9,7 +9,7 @@ enum OpenAIAuthConfig {
     static let registrationClientID = "dynamic_agent_client"
     static let scopes = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
     static let requiredScope = "chatgpt.tokens.use.direct"
-    static let agentName = "Calorie Tracker"
+    static let agentName = "EasyCal"
 
     // Scheme, host and path must never change between sign-ins; only the port may.
     static let callbackPath = "/auth/callback"
