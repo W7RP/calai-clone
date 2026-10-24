@@ -27,47 +27,36 @@ struct ResponsesClient: Sendable {
         return try JSONDecoder().decode(Listing.self, from: data).models.filter { $0.visibility == "list" }
     }
 
-    enum Part: Encodable, Sendable {
+    /// Input parts for the Phase 0 diagnostics screen.
+    enum Part: Sendable {
         case text(String)
         case jpeg(Data)
 
-        private enum CodingKeys: String, CodingKey { case type, text, image_url }
-
-        func encode(to encoder: any Encoder) throws {
-            var c = encoder.container(keyedBy: CodingKeys.self)
+        var llmPart: LLMPart {
             switch self {
-            case .text(let text):
-                try c.encode("input_text", forKey: .type)
-                try c.encode(text, forKey: .text)
-            case .jpeg(let data):
-                try c.encode("input_image", forKey: .type)
-                try c.encode("data:image/jpeg;base64,\(data.base64EncodedString())", forKey: .image_url)
+            case .text(let text): .text(text)
+            case .jpeg(let data): .image(data, mimeType: "image/jpeg")
             }
         }
     }
 
-    /// Streams events until the response finishes. The caller decides what counts as success:
-    /// only `.completed` does, per the docs.
     func stream(model: String, instructions: String, parts: [Part]) -> AsyncThrowingStream<ResponsesStreamEvent, Error> {
-        struct Message: Encodable { let role = "user"; let content: [Part] }
-        struct Body: Encodable {
-            let model: String
-            let instructions: String
-            let input: [Message]
-            let store = false
-            let stream = true
-        }
+        let request = LLMRequest(system: instructions, messages: [LLMMessage(role: .user, parts: parts.map(\.llmPart))])
+        return stream(body: ResponsesBody.make(model: model, request: request, useSchema: false, stream: true, imageDetail: nil))
+    }
 
-        return AsyncThrowingStream { continuation in
+    /// Streams events until the response finishes. The caller decides what counts as success:
+    /// only `.completed` does, per the docs. `body` must carry `store: false` and `stream: true`.
+    func stream(body: JSONValue) -> AsyncThrowingStream<ResponsesStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    var request = URLRequest(url: base.appending(path: "responses"))
+                    var request = URLRequest(url: base.appending(path: "responses"), timeoutInterval: 120)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
                     authorize(&request)
-                    request.httpBody = try JSONEncoder().encode(
-                        Body(model: model, instructions: instructions, input: [Message(content: parts)]))
+                    request.httpBody = body.serialized()
 
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     if let http = response as? HTTPURLResponse, http.statusCode != 200 {

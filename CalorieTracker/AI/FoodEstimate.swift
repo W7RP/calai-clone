@@ -23,6 +23,10 @@ struct EstimatedItem: Equatable, Sendable {
 struct FoodEstimate: Equatable, Sendable {
     var items: [EstimatedItem]
     var note: String?
+    /// The model's short account of what it saw and assumed.
+    var analysis: String?
+    /// Soft problems found by `EstimateValidator`, shown on the review screen.
+    var warnings: [String] = []
 }
 
 enum FoodEstimateParser {
@@ -37,6 +41,7 @@ enum FoodEstimateParser {
             let confidence: String?
             let source: String?
         }
+        let analysis: String?
         let items: [Item]
         let note: String?
     }
@@ -65,7 +70,56 @@ enum FoodEstimateParser {
                 confidence: EstimatedItem.Confidence(rawValue: item.confidence?.lowercased() ?? "") ?? .low,
                 fromLabel: item.source?.lowercased() == "label")
         }
-        let note = wire.note?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return FoodEstimate(items: items, note: note?.isEmpty == false ? note : nil)
+        return FoodEstimate(items: items, note: nonEmpty(wire.note), analysis: nonEmpty(wire.analysis))
     }
+
+    private static func nonEmpty(_ text: String?) -> String? {
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+}
+
+/// Physical sanity checks on a parsed estimate. Hard problems mean the answer is asked for again;
+/// soft ones are passed to the review screen as warnings.
+enum EstimateValidator {
+    static let maxItems = 30
+    static let maxGramsPerItem = 4_000.0
+    static let maxKcalPerItem = 6_000.0
+    /// Pure fat is 9 kcal/g; allow a little rounding.
+    static let maxKcalPerGram = 9.3
+
+    struct Result: Equatable {
+        var hardProblems: [String]
+        var warnings: [String]
+    }
+
+    static func check(_ estimate: FoodEstimate) -> Result {
+        var hard: [String] = []
+        var soft: [String] = []
+        if estimate.items.count > maxItems { hard.append("\(estimate.items.count) items is more than a meal") }
+
+        for item in estimate.items {
+            let m = item.macros
+            let macroMass = m.protein + m.carbs + m.fat
+            if item.grams > maxGramsPerItem { hard.append("\(item.name): \(whole(item.grams)) g is more than one portion") }
+            if m.kcal > maxKcalPerItem { hard.append("\(item.name): \(whole(m.kcal)) kcal is more than one portion") }
+            if item.grams <= 0, m.kcal > 0 { hard.append("\(item.name) has energy but no weight") }
+            if item.grams > 0, m.kcal / item.grams > maxKcalPerGram {
+                hard.append("\(item.name) has \(String(format: "%.1f", m.kcal / item.grams)) kcal per gram, more than pure fat")
+            }
+            if item.grams > 0, macroMass > item.grams * 1.05 + 1 {
+                hard.append("\(item.name)'s protein, carbs and fat weigh more than the item")
+            }
+            // Atwater check, loose because of fibre, polyols and rounding. Skipped when macros are missing.
+            // Alcohol (7 kcal/g) isn't in the schema, so drinks can legitimately come out high.
+            let fromMacros = Nutrition.kcalFromMacros(protein: m.protein, carbs: m.carbs, fat: m.fat)
+            if macroMass > 0, abs(m.kcal - fromMacros) > max(40, 0.25 * max(m.kcal, fromMacros)) {
+                soft.append("\(item.name): \(whole(m.kcal)) kcal doesn't match its macros (about \(whole(fromMacros)) kcal). Check before saving.")
+            }
+        }
+        return Result(hardProblems: hard, warnings: soft)
+    }
+
+    /// Formats without trapping on absurd values, which is exactly what this check is for.
+    private static func whole(_ value: Double) -> String { NumberInput.format(value, maxFractionDigits: 0) }
 }
