@@ -14,11 +14,21 @@ targets:
   CalorieTracker:
     type: application
     platform: iOS
-    sources: [CalorieTracker]
+    sources: [CalorieTracker, Sharing]
+    dependencies:
+      - target: EasyCalWidgets
+    entitlements:
+      path: CalorieTracker/CalorieTracker.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.w7rp.calorietracker]
     info:
       path: CalorieTracker/Info.plist
       properties:
         CFBundleDisplayName: EasyCal
+        # Widgets and controls open screens through easycal://scan, easycal://saved and so on.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.w7rp.calorietracker
+            CFBundleURLSchemes: [easycal]
         # XcodeGen otherwise writes a literal "1" here, which ignores the CI build number.
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -38,6 +48,32 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         BUILD_COMMIT: local
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  EasyCalWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - Sharing
+      # Plain helpers the widgets share with the app: Macros, number formatting, rings.
+      - CalorieTracker/Shared/Nutrition.swift
+      - CalorieTracker/Shared/Theme.swift
+    entitlements:
+      path: Widgets/EasyCalWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.w7rp.calorietracker]
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: EasyCal
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.w7rp.calorietracker.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
   CalorieTrackerTests:
     type: bundle.unit-test
     platform: iOS

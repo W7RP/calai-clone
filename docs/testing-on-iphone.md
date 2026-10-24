@@ -29,6 +29,7 @@ Tested 2026-10-24 with Xcode 27.1 and an iPhone on iOS 26.
 ### Signing
 5. **Xcode → Settings → Accounts → + → Apple Account**, and sign in with your Apple ID.
 6. Select the **CalorieTracker** project in the sidebar, then the **CalorieTracker** target, then **Signing & Capabilities**. Tick **Automatically manage signing** and set **Team** to your Personal Team.
+   Do the same for the **EasyCalWidgets** target (the home screen widgets). Both targets list the App Group `group.com.w7rp.calorietracker` under **App Groups**; make sure it's ticked in both, since that's how the widgets read today's numbers.
    Until the phone is connected you'll see "your team has no devices" and "no profiles found". That's expected.
 
 ### iPhone
@@ -46,9 +47,17 @@ Tested 2026-10-24 with Xcode 27.1 and an iPhone on iOS 26.
 cd ~/calai-clone
 git pull
 ```
-Then press Cmd+R. Run `xcodegen generate` only when files were added or removed, or `project.yml` changed. It rewrites the project, so set the Team again afterwards (step 6).
+Then press Cmd+R. Run `xcodegen generate` only when files were added or removed, or `project.yml` changed. It rewrites the project, so set the Team again afterwards on both targets (step 6).
 
 ## Troubleshooting
 - *Bundle identifier not available*: change `com.w7rp.calorietracker` in Signing & Capabilities to something unique, such as `com.<yourname>.easycal`.
 - *App won't open after a week*: the free signature expired. Plug in and press Cmd+R.
-- Free accounts allow 3 sideloaded apps per device and 10 app IDs per week.
+- Free accounts allow 3 sideloaded apps per device and 10 app IDs per week. The widget extension uses a second app ID.
+- *App Group not available* or widgets stuck on zero: in Signing & Capabilities, change the group to something unique such as `group.com.<yourname>.easycal` in both targets, and change `SharedStore.appGroup` in `Sharing/SharedStore.swift` to match.
+
+## Widgets, Control Center and Shortcuts
+- **Widgets**: long-press the Home Screen → Edit → Add Widget → EasyCal. *Calories Left* comes in small, medium and three Lock Screen sizes. *Quick Log* shows your saved meals with a + to log each one without opening the app.
+- **Control Center / Action Button**: add the *Scan Food* or *Saved Meals* control. For the Action Button, go to Settings → Action Button → Controls.
+- **Siri and Shortcuts**: "Log a saved meal in EasyCal", "Calories left in EasyCal", "Quick add calories in EasyCal", "Scan food with EasyCal". These appear in the Shortcuts app too.
+
+Food logged from a widget or Shortcut is added to the log the next time EasyCal opens; the widgets count it straight away.

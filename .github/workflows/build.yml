@@ -77,6 +77,7 @@ jobs:
           echo "::notice title=Info.plist::id=$(pb CFBundleIdentifier) version=$(pb CFBundleVersion) commit=$(pb BuildCommit) minOS=$(pb MinimumOSVersion)"
           echo "::notice title=ipa size::$(ls -la CalorieTracker-*.ipa)"
           test -f "$APP/CalorieTracker"
+          test -f "$APP/PlugIns/EasyCalWidgets.appex/EasyCalWidgets"
           test "$(pb CFBundleVersion)" = "${{ github.run_number }}"
 
       - uses: actions/upload-artifact@v5
