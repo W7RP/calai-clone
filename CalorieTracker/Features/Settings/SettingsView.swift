@@ -12,7 +12,11 @@ struct SettingsView: View {
                     NavigationLink("Daily goal") { GoalsView() }
                 }
                 Section("AI logging") {
-                    NavigationLink("ChatGPT") { ChatGPTSettingsView() }
+                    NavigationLink {
+                        AIProviderSettingsView()
+                    } label: {
+                        LabeledContent("AI provider", value: AIProviderSettings.activeProvider.name)
+                    }
                 }
                 Section {
                     ShareLink(item: exportFile, preview: SharePreview("Food log (\(entries.count) entries)")) {

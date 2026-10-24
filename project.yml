@@ -24,6 +24,11 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen: {}
         NSCameraUsageDescription: Scan barcodes and photograph meals or nutrition labels.
+        # A self-hosted model server (Ollama, LM Studio) on the home network is usually plain http.
+        # This allows http only to local addresses; internet hosts still need https.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Reach an AI model server on your local network, if you set one up in Settings.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         # Filled in by CI so the app can show which commit it was built from.
         BuildCommit: $(BUILD_COMMIT)
