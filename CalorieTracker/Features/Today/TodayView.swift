@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct TodayView: View {
+    @Environment(\.modelContext) private var context
     @State private var day = Date.now
     @State private var editor: EntryEditor?
     @State private var showingSettings = false
@@ -9,6 +10,7 @@ struct TodayView: View {
     @State private var showingRecents = false
     @State private var barcodeNotFound: String?
     @State private var aiSheet: AISheet?
+    @State private var showingHistory = false
 
     var body: some View {
         NavigationStack {
@@ -18,6 +20,9 @@ struct TodayView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                    }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("History", systemImage: "chart.bar") { showingHistory = true }
                     }
                     ToolbarItemGroup(placement: .bottomBar) {
                         Button("Previous day", systemImage: "chevron.left") { shift(by: -1) }
@@ -37,6 +42,12 @@ struct TodayView: View {
                             Button("Scan barcode", systemImage: "barcode.viewfinder") { showingScanner = true }
                             Button("Recent foods", systemImage: "clock") { showingRecents = true }
                             Button("Enter manually", systemImage: "square.and.pencil") { editor = .new(day: day) }
+                            Divider()
+                            Menu("Copy from yesterday", systemImage: "doc.on.doc") {
+                                ForEach(Meal.allCases) { meal in
+                                    Button(meal.title) { copyFromPreviousDay(meal) }
+                                }
+                            }
                         }
                     }
                 }
@@ -61,6 +72,9 @@ struct TodayView: View {
                 .sheet(item: $aiSheet) { kind in
                     AIAddView(day: day, startWithCamera: kind == .photo)
                 }
+                .sheet(isPresented: $showingHistory) {
+                    HistoryView()
+                }
         }
     }
 
@@ -69,6 +83,22 @@ struct TodayView: View {
         if calendar.isDateInToday(day) { return "Today" }
         if calendar.isDateInYesterday(day) { return "Yesterday" }
         return day.formatted(.dateTime.weekday(.wide).month().day())
+    }
+
+    /// Duplicates the previous day's entries for one meal onto the day being viewed.
+    private func copyFromPreviousDay(_ meal: Meal) {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: day)
+        guard let previous = calendar.date(byAdding: .day, value: -1, to: start) else { return }
+        let mealRaw = meal.rawValue
+        let descriptor = FetchDescriptor<LogEntry>(
+            predicate: #Predicate { $0.date >= previous && $0.date < start && $0.mealRaw == mealRaw },
+            sortBy: [SortDescriptor(\.date)])
+        for entry in (try? context.fetch(descriptor)) ?? [] {
+            context.insert(LogEntry(date: DayMath.move(entry.date, toDay: day), meal: meal, foodName: entry.foodName,
+                                    grams: entry.grams, macros: entry.macros, source: entry.source,
+                                    foodItem: entry.foodItem, aiConfidence: entry.aiConfidence))
+        }
     }
 
     private func shift(by days: Int) {
@@ -239,5 +269,5 @@ private struct MacroColumn: View {
 
 #Preview {
     TodayView()
-        .modelContainer(for: [FoodItem.self, LogEntry.self, DailyGoal.self], inMemory: true)
+        .modelContainer(for: [FoodItem.self, LogEntry.self, DailyGoal.self, WeightEntry.self], inMemory: true)
 }
