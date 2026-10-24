@@ -46,7 +46,7 @@ Tested 2026-10-24 with Xcode 27.1 and an iPhone on iOS 26.
 cd ~/calai-clone
 git pull
 ```
-Then press Cmd+R. Run `xcodegen generate` only when files were added or removed. It rewrites the project, so set the Team again afterwards (step 6).
+Then press Cmd+R. Run `xcodegen generate` only when files were added or removed, or `project.yml` changed. It rewrites the project, so set the Team again afterwards (step 6).
 
 ## Troubleshooting
 - *Bundle identifier not available*: change `com.w7rp.calorietracker` in Signing & Capabilities to something unique, such as `com.<yourname>.easycal`.

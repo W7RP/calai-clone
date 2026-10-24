@@ -39,7 +39,7 @@ struct OpenFoodFactsClient: Sendable {
         var components = URLComponents(string: "https://world.openfoodfacts.org/api/v2/product/\(barcode).json")!
         components.queryItems = [URLQueryItem(name: "fields", value: Self.fields)]
         var request = URLRequest(url: components.url!)
-        request.setValue("CalorieTracker/0.1 (personal iOS app)", forHTTPHeaderField: "User-Agent")
+        request.setValue("EasyCal/0.1 (personal iOS app)", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
 
         let (data, response) = try await URLSession.shared.data(for: request)

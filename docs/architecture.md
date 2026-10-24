@@ -21,7 +21,9 @@ CalorieTracker/
     History/           trends
     Settings/          goals, AI provider (keys, model, test), ChatGPT connection, export
   Shared/              small UI components, formatters, units
+  Assets.xcassets/     app icon (drawn by scripts/make_app_icon.py)
 CalorieTrackerTests/
+scripts/               make_app_icon.py
 ```
 
 ## Data model (SwiftData)
