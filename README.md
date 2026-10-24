@@ -1,24 +1,33 @@
-# Calorie tracker project kit
+# EasyCal
 
-Starter layout for a personal iOS calorie tracker. Nothing here is app code yet.
+No one should have to pay for yet another subscription.
+
+EasyCal is Cal AI, but open source. Snap a photo of your meal, scan a barcode, or type what you ate, and get calories and macros. Same features, no subscription: just hook up your own AI.
+
+<p>
+  <img src="docs/screenshots/today.png" width="200" alt="Today view with calorie ring and macros">
+  <img src="docs/screenshots/review.png" width="200" alt="Reviewing an AI estimate before saving">
+  <img src="docs/screenshots/barcode.png" width="200" alt="Logging a scanned product">
+  <img src="docs/screenshots/history.png" width="200" alt="Calorie and weight history">
+</p>
+
+## Bring your own AI
+- Sign in with ChatGPT and use your existing plan
+- Or paste a Claude, OpenAI or Gemini API key
+- Or point it at any OpenAI-compatible server (OpenRouter, Ollama, LM Studio)
+
+Keys stay in the iPhone Keychain. There's no backend and no account, and your food log never leaves the phone except for the requests you send to your own AI provider.
+
+## Build
+iOS 26+. On a Mac with Xcode:
 
 ```
-CLAUDE.md                  rules for Claude Code in this repo
-docs/                      spec, architecture, OpenAI sign-in notes, open questions
-.claude/skills/            four Swift skills (MIT, from Paul Hudson and Daniel Eden)
-claude-project/
-  instructions.md          paste into a claude.ai Project's instructions
+brew install xcodegen
+xcodegen generate
+open CalorieTracker.xcodeproj
 ```
 
-## Use it as a claude.ai Project
-1. Create a Project, paste `claude-project/instructions.md` into its instructions.
-2. Upload the four files in `docs/` as project knowledge.
+CI builds an unsigned `.ipa` on every push. See `docs/testing-on-iphone.md` for installing it.
 
-## Use it with Claude Code
-1. Copy this folder's contents into the repo root (`git init` first).
-2. `.claude/skills/` loads automatically; `CLAUDE.md` is read on startup.
-3. Start with Phase 0 in `docs/architecture.md`.
-
-## Skill sources
-- swiftui-pro, swift-concurrency-pro, swiftdata-pro: github.com/twostraws (Paul Hudson), MIT
-- swiftui-gotchas: github.com/daneden/agent-skills, MIT
+## Status
+Early. Builds and passes tests in CI, not yet tested on a real device.
