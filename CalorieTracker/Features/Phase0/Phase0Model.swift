@@ -12,13 +12,15 @@ final class Phase0Model {
     var grantedScopes: [String] = []
     var expiresAt: Date?
     var models: [ResponsesClient.Model] = []
-    var selectedModel = ""
+    var selectedModel = UserDefaults.standard.string(forKey: FoodEstimator.modelKey) ?? "" {
+        didSet { UserDefaults.standard.set(selectedModel, forKey: FoodEstimator.modelKey) }
+    }
     var output = ""
     var eventLog: [String] = []
     var isBusy = false
     var awaitingPaste = false
 
-    private let auth = AuthSession()
+    private let auth = AuthSession.shared
     private let browser = BrowserSignIn()
     private var listener: LoopbackListener?
     private var pendingAttempt: AuthAttempt?
@@ -172,12 +174,13 @@ final class Phase0Model {
             status = "Not signed in"
             return nil
         }
-        if tokens.expiresAt < Date() {
-            // Phase 0 doesn't refresh; signing in again is enough to finish the spike.
-            status = "Access token expired. Sign in again."
+        _ = tokens
+        do {
+            return ResponsesClient(accessToken: try await auth.validAccessToken())
+        } catch {
+            fail(error)
             return nil
         }
-        return ResponsesClient(accessToken: tokens.accessToken)
     }
 
     private func openInSafari(_ url: URL) async {
