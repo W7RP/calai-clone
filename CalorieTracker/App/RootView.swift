@@ -1,9 +1,9 @@
 import SwiftData
 import SwiftUI
 
-/// Onboarding on first run, then three tabs.
+/// Onboarding on first run, then the tabs.
 struct RootView: View {
-    enum Page: Hashable { case home, progress, settings }
+    enum Page: Hashable { case home, progress, coach, settings }
 
     @AppStorage(Onboarding.doneKey) private var onboarded = false
     @Environment(\.modelContext) private var context
@@ -22,6 +22,9 @@ struct RootView: View {
                     }
                     Tab("Progress", systemImage: "chart.bar.fill", value: Page.progress) {
                         HistoryView()
+                    }
+                    Tab("Coach", systemImage: "sparkles", value: Page.coach) {
+                        CoachView()
                     }
                     Tab("Settings", systemImage: "gearshape.fill", value: Page.settings) {
                         SettingsView()
