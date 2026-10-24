@@ -1,0 +1,46 @@
+name: CalorieTracker
+options:
+  bundleIdPrefix: com.w7rp
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    # CI overrides this with the run number so each sideloaded build is distinguishable.
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  CalorieTracker:
+    type: application
+    platform: iOS
+    sources: [CalorieTracker]
+    info:
+      path: CalorieTracker/Info.plist
+      properties:
+        CFBundleDisplayName: Calories
+        # XcodeGen otherwise writes a literal "1" here, which ignores the CI build number.
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # Filled in by CI so the app can show which commit it was built from.
+        BuildCommit: $(BUILD_COMMIT)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.w7rp.calorietracker
+        TARGETED_DEVICE_FAMILY: "1"
+        BUILD_COMMIT: local
+  CalorieTrackerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [CalorieTrackerTests]
+    dependencies:
+      - target: CalorieTracker
+schemes:
+  CalorieTracker:
+    build:
+      targets:
+        CalorieTracker: all
+    test:
+      targets: [CalorieTrackerTests]
