@@ -23,7 +23,7 @@ struct ChatGPTSettingsView: View {
                     Button("Disconnect", role: .destructive) { Task { await model.signOut() } }
                 }
             } footer: {
-                Text("AI calls use your ChatGPT plan's allowance. Photos and descriptions go to OpenAI under your account. You can set a weekly cap for this app in ChatGPT → Settings.")
+                Text("AI calls use your ChatGPT plan's allowance. Photos and descriptions go to OpenAI under your account. You can set a weekly cap for this app in ChatGPT → Settings. To use an API key instead, pick another provider in Settings → AI provider.")
             }
 
             if model.isSignedIn {
