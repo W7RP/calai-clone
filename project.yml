@@ -23,7 +23,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         UILaunchScreen: {}
-        NSCameraUsageDescription: Scan barcodes on food packaging.
+        NSCameraUsageDescription: Scan barcodes and photograph meals or nutrition labels.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         # Filled in by CI so the app can show which commit it was built from.
         BuildCommit: $(BUILD_COMMIT)
