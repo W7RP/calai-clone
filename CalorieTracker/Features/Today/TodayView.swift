@@ -8,6 +8,7 @@ struct TodayView: View {
     @State private var showingScanner = false
     @State private var showingRecents = false
     @State private var barcodeNotFound: String?
+    @State private var aiSheet: AISheet?
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,9 @@ struct TodayView: View {
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu("Add food", systemImage: "plus") {
+                            Button("Photo", systemImage: "camera") { aiSheet = .photo }
+                            Button("Describe it", systemImage: "text.bubble") { aiSheet = .text }
+                            Divider()
                             Button("Scan barcode", systemImage: "barcode.viewfinder") { showingScanner = true }
                             Button("Recent foods", systemImage: "clock") { showingRecents = true }
                             Button("Enter manually", systemImage: "square.and.pencil") { editor = .new(day: day) }
@@ -54,6 +58,9 @@ struct TodayView: View {
                 .sheet(isPresented: $showingRecents) {
                     RecentFoodsView(day: day)
                 }
+                .sheet(item: $aiSheet) { kind in
+                    AIAddView(day: day, startWithCamera: kind == .photo)
+                }
         }
     }
 
@@ -67,6 +74,11 @@ struct TodayView: View {
     private func shift(by days: Int) {
         day = Calendar.current.date(byAdding: .day, value: days, to: day) ?? day
     }
+}
+
+enum AISheet: String, Identifiable {
+    case photo, text
+    var id: String { rawValue }
 }
 
 /// What the entry sheet is editing: a new entry for a day, or an existing one.
