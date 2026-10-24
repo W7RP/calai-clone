@@ -129,6 +129,7 @@ private struct DayLog: View {
     @Environment(\.modelContext) private var context
     @Query private var entries: [LogEntry]
     @Query(sort: \DailyGoal.effectiveFrom, order: .reverse) private var goals: [DailyGoal]
+    @Query private var marks: [TrainingDayMark]
     @Binding var editor: EntryEditor?
     let day: Date
 
@@ -138,15 +139,23 @@ private struct DayLog: View {
         let start = Calendar.current.startOfDay(for: day)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? start
         _entries = Query(filter: #Predicate<LogEntry> { $0.date >= start && $0.date < end }, sort: \.date)
+        _marks = Query(filter: #Predicate<TrainingDayMark> { $0.day >= start && $0.day < end })
     }
 
     var body: some View {
         let totals = Macros.total(entries.map(\.macros))
-        let goal = GoalSelection.active(goals, on: day, effectiveFrom: \.effectiveFrom)
+        let targets = DayTargets(goals: goals, marks: marks)
+        let goal = targets.goal(on: day)
+        let isTraining = targets.isTraining(day)
 
         List {
             Section {
-                DaySummary(totals: totals, goal: goal?.macros)
+                DaySummary(totals: totals, goal: goal?.target(trainingDay: isTraining),
+                           kind: goal?.isCycling == true ? (isTraining ? "Gym day" : "Rest day") : nil)
+                if let goal, goal.isCycling {
+                    Toggle("Gym day", systemImage: "dumbbell",
+                           isOn: Binding(get: { isTraining }, set: { setTraining($0, schedule: goal.trainingWeekdays) }))
+                }
             }
 
             ForEach(Meal.allCases) { meal in
@@ -183,6 +192,16 @@ private struct DayLog: View {
     }
 }
 
+extension DayLog {
+    /// Marks this day by hand. Matching the weekly schedule again just removes the mark.
+    private func setTraining(_ isTraining: Bool, schedule: WeekdaySet) {
+        for mark in marks { context.delete(mark) }
+        if isTraining != schedule.contains(day: day) {
+            context.insert(TrainingDayMark(day: Calendar.current.startOfDay(for: day), isTraining: isTraining))
+        }
+    }
+}
+
 private struct EntryRow: View {
     let entry: LogEntry
 
@@ -205,6 +224,8 @@ private struct EntryRow: View {
 private struct DaySummary: View {
     let totals: Macros
     let goal: Macros?
+    /// "Gym day" / "Rest day" when the goal cycles.
+    var kind: String?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -224,6 +245,11 @@ private struct DaySummary: View {
                      : "\(NumberInput.format(-remaining, maxFractionDigits: 0)) kcal over \(NumberInput.format(goal.kcal, maxFractionDigits: 0))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if let kind {
+                    Text("\(kind) target")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Text("\(NumberInput.format(totals.kcal, maxFractionDigits: 0)) kcal")
                     .font(.largeTitle.bold())
@@ -269,5 +295,5 @@ private struct MacroColumn: View {
 
 #Preview {
     TodayView()
-        .modelContainer(for: [FoodItem.self, LogEntry.self, DailyGoal.self, WeightEntry.self], inMemory: true)
+        .modelContainer(for: [FoodItem.self, LogEntry.self, DailyGoal.self, WeightEntry.self, GoalPlan.self, TrainingDayMark.self], inMemory: true)
 }

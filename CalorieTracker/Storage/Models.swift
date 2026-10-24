@@ -123,14 +123,132 @@ final class DailyGoal {
     var fat: Double
     var effectiveFrom: Date
 
+    // Carb cycling. All nil for a goal typed in by hand or saved with cycling off.
+    var trainingKcal: Double?
+    var trainingProtein: Double?
+    var trainingCarbs: Double?
+    var trainingFat: Double?
+    var restKcal: Double?
+    var restProtein: Double?
+    var restCarbs: Double?
+    var restFat: Double?
+    /// WeekdaySet raw value. Kept on the goal so past days keep the schedule they were planned with.
+    var trainingWeekdaysRaw: Int?
+
     var macros: Macros { Macros(kcal: kcal, protein: protein, carbs: carbs, fat: fat) }
 
-    init(macros: Macros, effectiveFrom: Date) {
+    var trainingWeekdays: WeekdaySet { WeekdaySet(rawValue: trainingWeekdaysRaw ?? 0) }
+
+    var training: Macros? {
+        guard let trainingKcal, let trainingProtein, let trainingCarbs, let trainingFat else { return nil }
+        return Macros(kcal: trainingKcal, protein: trainingProtein, carbs: trainingCarbs, fat: trainingFat)
+    }
+
+    var rest: Macros? {
+        guard let restKcal, let restProtein, let restCarbs, let restFat else { return nil }
+        return Macros(kcal: restKcal, protein: restProtein, carbs: restCarbs, fat: restFat)
+    }
+
+    var isCycling: Bool { training != nil && rest != nil }
+
+    /// The target for one day: training or rest numbers when cycling, the plain goal otherwise.
+    func target(trainingDay: Bool) -> Macros {
+        (trainingDay ? training : rest) ?? macros
+    }
+
+    init(macros: Macros, effectiveFrom: Date, training: Macros? = nil, rest: Macros? = nil,
+         trainingWeekdays: WeekdaySet? = nil) {
         kcal = macros.kcal
         protein = macros.protein
         carbs = macros.carbs
         fat = macros.fat
         self.effectiveFrom = effectiveFrom
+        trainingKcal = training?.kcal
+        trainingProtein = training?.protein
+        trainingCarbs = training?.carbs
+        trainingFat = training?.fat
+        restKcal = rest?.kcal
+        restProtein = rest?.protein
+        restCarbs = rest?.carbs
+        restFat = rest?.fat
+        trainingWeekdaysRaw = trainingWeekdays?.rawValue
+    }
+}
+
+/// The answers behind the calculated goal. One row, edited in place; each save also writes a DailyGoal.
+@Model
+final class GoalPlan {
+    var sexRaw: String
+    var birthYear: Int
+    var heightCm: Double
+    var lifestyleRaw: String
+    var trainingWeekdaysRaw: Int
+    var sessionMinutes: Double
+    var cardioMinutesPerWeek: Double
+    var cardioIntensityRaw: String
+    var targetKg: Double
+    var weeklyRateKg: Double
+    var cycling: Bool
+    var cyclingShift: Double
+    var updatedAt: Date
+
+    var sex: Sex { Sex(rawValue: sexRaw) ?? .male }
+    var lifestyle: Lifestyle { Lifestyle(rawValue: lifestyleRaw) ?? .desk }
+    var cardioIntensity: CardioIntensity { CardioIntensity(rawValue: cardioIntensityRaw) ?? .moderate }
+    var trainingWeekdays: WeekdaySet { WeekdaySet(rawValue: trainingWeekdaysRaw) }
+
+    init(inputs: PlanInputs, birthYear: Int, updatedAt: Date = .now) {
+        sexRaw = inputs.sex.rawValue
+        self.birthYear = birthYear
+        heightCm = inputs.heightCm
+        lifestyleRaw = inputs.lifestyle.rawValue
+        trainingWeekdaysRaw = inputs.trainingDays.rawValue
+        sessionMinutes = inputs.sessionMinutes
+        cardioMinutesPerWeek = inputs.cardioMinutesPerWeek
+        cardioIntensityRaw = inputs.cardioIntensity.rawValue
+        targetKg = inputs.targetKg
+        weeklyRateKg = inputs.weeklyRateKg
+        cycling = inputs.cycling
+        cyclingShift = inputs.cyclingShift
+        self.updatedAt = updatedAt
+    }
+
+    func update(from inputs: PlanInputs, birthYear: Int, at date: Date = .now) {
+        sexRaw = inputs.sex.rawValue
+        self.birthYear = birthYear
+        heightCm = inputs.heightCm
+        lifestyleRaw = inputs.lifestyle.rawValue
+        trainingWeekdaysRaw = inputs.trainingDays.rawValue
+        sessionMinutes = inputs.sessionMinutes
+        cardioMinutesPerWeek = inputs.cardioMinutesPerWeek
+        cardioIntensityRaw = inputs.cardioIntensity.rawValue
+        targetKg = inputs.targetKg
+        weeklyRateKg = inputs.weeklyRateKg
+        cycling = inputs.cycling
+        cyclingShift = inputs.cyclingShift
+        updatedAt = date
+    }
+
+    /// Inputs at a given body weight, so the estimate follows the latest weigh-in.
+    func inputs(weightKg: Double, on date: Date = .now, calendar: Calendar = .current) -> PlanInputs {
+        PlanInputs(sex: sex, age: calendar.component(.year, from: date) - birthYear, heightCm: heightCm,
+                   weightKg: weightKg, lifestyle: lifestyle, trainingDays: trainingWeekdays,
+                   sessionMinutes: sessionMinutes, cardioMinutesPerWeek: cardioMinutesPerWeek,
+                   cardioIntensity: cardioIntensity, targetKg: targetKg, weeklyRateKg: weeklyRateKg,
+                   cycling: cycling, cyclingShift: cyclingShift)
+    }
+}
+
+/// A day the user marked as training or rest by hand, overriding the weekly schedule.
+@Model
+final class TrainingDayMark {
+    /// Start of the day.
+    var day: Date
+    var isTraining: Bool
+
+    init(day: Date, isTraining: Bool) {
+        self.day = day
+        self.isTraining = isTraining
     }
 }
 
