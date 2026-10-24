@@ -23,6 +23,9 @@ Read these before doing anything non-trivial:
 - `swiftui-gotchas` — consult before animation, navigation, or concurrency-diagnostic work
 
 ## Commands
-Fill in once the Xcode project exists (build, test, run on device).
+- The Xcode project is generated from `project.yml` by XcodeGen and is not committed. On a Mac: `brew install xcodegen && xcodegen generate`, then open `CalorieTracker.xcodeproj`.
+- CI (`.github/workflows/build.yml`) builds an unsigned `.ipa` on every PR and push to `main` and uploads it as an artifact.
+- No Mac is the main workstation (Windows). Builds reach the phone by sideloading with AltStore; see `docs/testing-on-iphone.md`. No paid Apple developer account, so no TestFlight.
+- macOS CI minutes count 10x on this private repo: don't add jobs or matrix builds without a reason.
 
 Commit format, README tone, comment style, and test policy come from my global `~/.claude/CLAUDE.md`; don't restate them here.
