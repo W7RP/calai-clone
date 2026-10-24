@@ -8,8 +8,13 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Goals") {
-                    NavigationLink("Daily goal") { GoalsView() }
+                Section {
+                    NavigationLink("Weight goal and activity") { PlanView() }
+                    NavigationLink("Set daily goal by hand") { GoalsView() }
+                } header: {
+                    Text("Goals")
+                } footer: {
+                    Text("The weight goal works out your daily calories and macros. Setting them by hand replaces that until you save the weight goal again.")
                 }
                 Section("AI logging") {
                     NavigationLink {

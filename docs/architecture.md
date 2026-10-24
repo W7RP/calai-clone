@@ -29,7 +29,10 @@ scripts/               make_app_icon.py
 ## Data model (SwiftData)
 - `FoodItem`: id, name, brand?, barcode?, kcalPer100g, proteinPer100g, carbsPer100g, fatPer100g, servingGrams?, source (`off`, `ai`, `manual`)
 - `LogEntry`: id, date, meal, foodName, grams, kcal, protein, carbs, fat, source, `foodItem?` (relationship), `aiConfidence?`
-- `DailyGoal`: kcal, protein, carbs, fat, effective-from date
+- `DailyGoal`: kcal, protein, carbs, fat, effective-from date; optional gym-day and rest-day macros plus the gym weekdays when carb cycling is on
+- `GoalPlan`: the answers behind a calculated goal (sex, birth year, height, daily movement, gym days and session length, cardio, goal weight and pace, cycling). One row; saving it writes a new `DailyGoal`
+- `TrainingDayMark`: a single day switched to gym or rest by hand, overriding the weekly schedule
+- `WeightEntry`: date, kg
 - Entries snapshot their numbers so editing a cached `FoodItem` later doesn't rewrite history.
 
 ## Key decisions
@@ -37,6 +40,8 @@ scripts/               make_app_icon.py
 - AI is provider-agnostic (`LLMClient`). Each provider gets the same prompt and schema; see `ai-providers.md`.
 - Images are downscaled (1568 px long edge) and JPEG-compressed before upload, with metadata stripped. The ChatGPT route is streaming-only, so that client parses SSE and assembles the final JSON.
 - AI output is requested as schema-constrained JSON where the provider supports it, and always validated on decode and for physical plausibility. A bad answer is sent back once for repair; after that it's an error state, never a silent partial entry. Providers that reject the schema field are retried without it automatically.
+- The calorie target is Mifflin-St Jeor BMR times a daily-movement factor (1.2-1.7, workouts excluded), plus gym and cardio burn from METs with the resting MET taken out, averaged over the week. Goal pace converts at 7,700 kcal per kg, floored at 1,500 / 1,200 kcal. Protein is 2 g/kg of goal weight when cutting (1.8 g/kg otherwise), fat a quarter of kcal, carbs the rest. Cycling moves carbs from rest days to gym days with the weekly total unchanged. All of it lives in `Shared/EnergyPlan.swift` and is unit tested.
+- A day is on target within 10% of that day's kcal goal (gym or rest day).
 - One `AuthSession` actor owns tokens and refresh so concurrent requests can't race a rotating refresh token.
 
 ## Phases

@@ -13,6 +13,11 @@ Log what I eat in a few seconds, get a calorie and macro total for the day, and 
 - Edit or delete any entry. Copy yesterday's meal.
 - Weekly trend (calories and, optionally, weight) with Swift Charts.
 
+## Goals
+- Weight goal: current and goal weight, pace per week. The app works out maintenance from age, sex, height, daily movement, gym days and cardio, then a daily calorie and macro target.
+- Optional carb cycling: more carbs on gym days, fewer on rest days, same weekly total. Gym days follow a weekly schedule and can be switched per day on Today.
+- History shows a week or month calendar, green for days within 10% of the goal and red otherwise, and turns the recent average into an expected weekly weight change.
+
 ## Data
 - Everything local in SwiftData. No server, no accounts, no analytics.
 - Foods I've logged before are cached so repeat items don't need a scan or an AI call.
