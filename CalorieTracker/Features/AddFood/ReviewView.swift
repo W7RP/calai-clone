@@ -7,6 +7,8 @@ struct ReviewView: View {
 
     let day: Date
     let note: String?
+    let analysis: String?
+    let warnings: [String]
     let onSaved: () -> Void
 
     @State private var items: [ReviewItem]
@@ -15,6 +17,8 @@ struct ReviewView: View {
     init(estimate: FoodEstimate, day: Date, onSaved: @escaping () -> Void) {
         self.day = day
         note = estimate.note
+        analysis = estimate.analysis
+        warnings = estimate.warnings
         self.onSaved = onSaved
         _items = State(initialValue: estimate.items.map(ReviewItem.init))
     }
@@ -26,6 +30,17 @@ struct ReviewView: View {
                     .font(.footnote)
                 if let note {
                     Text(note).font(.footnote).foregroundStyle(.secondary)
+                }
+                ForEach(warnings, id: \.self) { warning in
+                    Label(warning, systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+                if let analysis {
+                    DisclosureGroup("How this was estimated") {
+                        Text(analysis).font(.footnote).foregroundStyle(.secondary)
+                    }
+                    .font(.footnote)
                 }
             }
 
