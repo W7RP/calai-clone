@@ -7,7 +7,9 @@ SwiftUI + SwiftData, iOS 26+, Swift 6 strict concurrency. No backend.
 CalorieTracker/
   App/                 app entry, root navigation, dependency container
   Auth/                OpenAI sign-in: PKCE, loopback listener, token store (Keychain), refresh
-  AI/                  Responses API client (streaming), prompts, response parsing
+  AI/                  estimator (prompt, schema, validation, retry), image prep
+    LLM/               provider-neutral request/client protocol, JSON builder, schema renderer, settings
+    Providers/         ChatGPT (Responses, streaming), Anthropic, OpenAI, Gemini, OpenAI-compatible
   Food/
     Barcode/           VisionKit DataScannerViewController wrapper
     OpenFoodFacts/     product lookup client + mapping to FoodItem
@@ -17,7 +19,7 @@ CalorieTracker/
     Today/             day view
     AddFood/           the three logging flows + review screen
     History/           trends
-    Settings/          goals, ChatGPT connection status and usage, export
+    Settings/          goals, AI provider (keys, model, test), ChatGPT connection, export
   Shared/              small UI components, formatters, units
 CalorieTrackerTests/
 ```
@@ -30,8 +32,9 @@ CalorieTrackerTests/
 
 ## Key decisions
 - Barcode data comes from Open Food Facts (free, no key). USDA FoodData Central is the backup if coverage is poor, but it needs a free key, so decide when we get there.
-- Images are downscaled and JPEG-compressed before upload; the Responses API route here is streaming-only, so the client parses SSE and assembles the final JSON.
-- AI output is requested as strict JSON and validated on decode. A decode failure is an error state, never a silent partial entry. Whether schema-constrained output works on this route is untested; check in Phase 0.
+- AI is provider-agnostic (`LLMClient`). Each provider gets the same prompt and schema; see `ai-providers.md`.
+- Images are downscaled (1568 px long edge) and JPEG-compressed before upload, with metadata stripped. The ChatGPT route is streaming-only, so that client parses SSE and assembles the final JSON.
+- AI output is requested as schema-constrained JSON where the provider supports it, and always validated on decode and for physical plausibility. A bad answer is sent back once for repair; after that it's an error state, never a silent partial entry. Providers that reject the schema field are retried without it automatically.
 - One `AuthSession` actor owns tokens and refresh so concurrent requests can't race a rotating refresh token.
 
 ## Phases

@@ -1,62 +1,66 @@
 import Foundation
 
-/// Turns a photo and/or a description into reviewable items using the user's ChatGPT plan.
+/// Turns a photo and/or a description into reviewable items with whichever provider is set up.
+/// Retries transient failures with backoff, and asks the model once more when its answer can't be used.
 struct FoodEstimator: Sendable {
-    static let modelKey = "aiModel"
+    let client: any LLMClient
+    /// Pause before retrying a transient error. Replaced in tests.
+    var sleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    var maxTransientRetries = 2
+    var maxRepairs = 1
 
-    static let instructions = """
-    You estimate nutrition for a personal calorie tracker. Reply with one JSON object and nothing else:
-    {"items":[{"name":string,"grams":number,"kcal":number,"protein_g":number,"carbs_g":number,"fat_g":number,\
-    "confidence":"high"|"medium"|"low","source":"label"|"estimate"}],"note":string|null}
-    Rules:
-    - Metric units. Numbers are for the portion eaten, not per 100 g.
-    - If a nutrition facts label is visible, read the printed values and scale them to the portion; set source "label".
-    - Otherwise estimate a realistic portion and set confidence honestly; use "low" when guessing.
-    - Split a meal into separate items (e.g. "2 eggs", "toast", "butter").
-    - Products are often from Canadian (Quebec) grocery stores; labels may be in French.
-    - If nothing edible is identifiable, return {"items":[],"note":"<short reason>"}.
-    """
-
-    func estimate(description: String?, jpeg: Data?) async throws -> FoodEstimate {
-        guard let model = UserDefaults.standard.string(forKey: Self.modelKey), !model.isEmpty else { throw AIError.noModel }
-        let token: String
-        do {
-            token = try await AuthSession.shared.validAccessToken()
-        } catch AuthSession.AuthError.signedOut {
-            throw AIError.notConnected
-        } catch AuthSession.AuthError.sessionEnded {
-            throw AIError.sessionEnded
-        }
-
-        var parts: [ResponsesClient.Part] = []
-        let text = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        parts.append(.text(text.isEmpty ? "What did I eat? Estimate each item." : text))
-        if let jpeg { parts.append(.jpeg(jpeg)) }
-
-        let output = try await collect(ResponsesClient(accessToken: token).stream(
-            model: model, instructions: Self.instructions, parts: parts))
-        let estimate = try FoodEstimateParser.parse(output)
-        if estimate.items.isEmpty { throw AIError.nothingFound(estimate.note) }
-        return estimate
+    /// The estimator for the provider chosen in Settings.
+    static func current() throws -> FoodEstimator {
+        FoodEstimator(client: try LLMClientFactory.make(AIProviderSettings.config(for: AIProviderSettings.activeProvider)))
     }
 
-    /// Joins the text deltas. Only `response.completed` counts as success.
-    private func collect(_ stream: AsyncThrowingStream<ResponsesStreamEvent, Error>) async throws -> String {
-        var text = ""
-        do {
-            for try await event in stream {
-                switch event {
-                case .textDelta(let delta): text += delta
-                case .completed: return text
-                case .failed(let code, let message), .error(let code, let message):
-                    throw AIError.fromCode(code, message: message)
-                case .incomplete(let reason): throw AIError.incomplete(reason ?? "unknown")
-                case .other: continue
+    func estimate(description: String?, jpeg: Data?) async throws -> FoodEstimate {
+        var first = LLMMessage(role: .user, parts: [])
+        if let jpeg { first.parts.append(.image(jpeg, mimeType: "image/jpeg")) }
+        first.parts.append(.text(FoodPrompt.userText(description: description, hasImage: jpeg != nil)))
+        var request = LLMRequest(system: FoodPrompt.system, messages: [first], schema: FoodPrompt.schema)
+
+        var repairsLeft = maxRepairs
+        while true {
+            let output = try await completeWithRetry(request)
+            let problem: String
+            do {
+                var estimate = try FoodEstimateParser.parse(output)
+                let check = EstimateValidator.check(estimate)
+                if check.hardProblems.isEmpty {
+                    if estimate.items.isEmpty { throw AIError.nothingFound(estimate.note) }
+                    estimate.warnings = check.warnings
+                    return estimate
                 }
+                guard repairsLeft > 0 else { throw AIError.implausible(check.hardProblems.joined(separator: "; ")) }
+                problem = check.hardProblems.joined(separator: "; ")
+            } catch AIError.unreadable where repairsLeft > 0 {
+                problem = "it was not a valid JSON object in the required shape"
             }
-        } catch let error as ResponsesClient.HTTPError {
-            throw AIError.fromHTTP(status: error.status, body: error.body)
+            repairsLeft -= 1
+            // Keep the original photo and text, add the bad answer and what was wrong with it.
+            request.messages = [first, .assistant(String(output.prefix(4_000))), .user(.text(FoodPrompt.repair(problem: problem)))]
         }
-        throw AIError.incomplete("connection closed early")
+    }
+
+    private func completeWithRetry(_ request: LLMRequest) async throws -> String {
+        var attempt = 0
+        while true {
+            do {
+                return try await client.complete(request)
+            } catch let error as AIError where error.isTransient && attempt < maxTransientRetries && !Task.isCancelled {
+                attempt += 1
+                try await sleep(.milliseconds(attempt == 1 ? 1_500 : 4_000))
+            } catch let error as AIError where error.isIncomplete && attempt == 0 {
+                // Usually a one-off (stream cut, long thinking); one plain retry.
+                attempt += 1
+            }
+        }
+    }
+}
+
+private extension AIError {
+    var isIncomplete: Bool {
+        if case .incomplete = self { true } else { false }
     }
 }
