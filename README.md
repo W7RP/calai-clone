@@ -2,7 +2,7 @@
 
 No one should have to pay for yet another subscription.
 
-EasyCal is Cal AI, but open source. Snap a photo of your meal, scan a barcode, or type what you ate, and get calories and macros. Same features, no subscription: just hook up your own AI.
+Snap a photo of your meal, scan a barcode, or type what you ate, and get calories and macros. Everything the paid AI calorie apps do, but open source: just hook up your own AI.
 
 <p>
   <img src="docs/screenshots/today.png" width="200" alt="Today view with calorie ring and macros">

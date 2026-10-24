@@ -4,7 +4,7 @@ Nothing here has been done; it's the list of things to decide or clean up first.
 
 ## Must do
 - **Licence.** Add a `LICENSE` file. MIT matches the plan in `openai-signin.md`.
-- **Name.** "Cal AI" is another company's product. Don't use it in the repo name, app name or README. The display name is already "Calories"; the repo name `calai-clone` should change (e.g. to EasyCal) before it's public.
+- **Name.** Pick a final repo name before it's public (e.g. EasyCal). The app's display name is already "Calories".
 - **Bundle ID.** `com.w7rp.calorietracker` is tied to one person. Fine for a personal fork, but document that builders should change `bundleIdPrefix` in `project.yml`, and the Keychain service names will follow.
 - **Secrets scan.** History checked on 2026-10-24: no API keys or tokens found. Run GitHub secret scanning once more right before flipping visibility, since public history can't be taken back.
 - **README.** Expand it with: how to pick a provider and where to get a key, what data goes where, and that AI numbers are estimates.
