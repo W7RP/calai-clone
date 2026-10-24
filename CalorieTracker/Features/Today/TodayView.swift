@@ -5,6 +5,7 @@ import SwiftUI
 struct TodayView: View {
     @Environment(\.modelContext) private var context
     @Environment(AnalysisCenter.self) private var analysis
+    @Environment(AppRouter.self) private var router
     @Query private var allEntries: [LogEntry]
 
     @State private var day = Date.now
@@ -91,6 +92,11 @@ struct TodayView: View {
             .sheet(item: $review) { target in
                 ReviewSheet(id: target.id) { review = nil }
             }
+            .onChange(of: router.route, initial: true) { _, route in
+                guard let route else { return }
+                router.route = nil
+                open(route)
+            }
             .onChange(of: readyJobs) { old, new in
                 // Open the review as soon as an estimate lands, unless something else is on screen.
                 guard let first = new.first(where: { !old.contains($0) }), nothingPresented else { return }
@@ -129,6 +135,18 @@ struct TodayView: View {
         case .copy(let meal):
             LogActions.copyPreviousDay(to: day, meal: meal, in: context)
         }
+    }
+
+    /// A widget, control or Shortcut asked for this screen. Always about today.
+    private func open(_ route: AppRoute) {
+        day = .now
+        switch route {
+        case .scan: pendingAction = .scanFood
+        case .barcode: pendingAction = .barcode
+        case .describe: pendingAction = .describe
+        case .saved: pendingAction = .myFoods
+        }
+        if nothingPresented { runPendingAction() }
     }
 
     private func openManualForMissingBarcode() {
@@ -401,5 +419,6 @@ private struct DayLog: View {
 #Preview {
     TodayView()
         .environment(AnalysisCenter())
+        .environment(AppRouter())
         .modelContainer(for: AppModels.all, inMemory: true)
 }

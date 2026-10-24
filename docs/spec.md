@@ -33,4 +33,4 @@ Log what I eat in a few seconds, get a calorie and macro total for the day, and 
 App Store release, multi-user, cloud sync, social features, meal plans, a backend of any kind.
 
 ## Maybe later
-HealthKit write (dietary energy), home-screen widget with today's total, Siri/App Intent for quick-add, Apple Watch glance.
+HealthKit write (dietary energy), Apple Watch glance. (Widgets, controls and Siri/Shortcuts quick-add are built.)

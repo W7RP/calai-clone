@@ -1,28 +1,9 @@
 import Foundation
 import SwiftData
 
-/// One food inside a saved meal. Numbers are for the amount eaten, like a LogEntry.
-struct SavedMealItem: Codable, Equatable, Sendable {
-    var foodName: String
-    var grams: Double
-    var kcal: Double
-    var protein: Double
-    var carbs: Double
-    var fat: Double
-    var sourceRaw: String
-    var thumbnail: Data?
-
-    var macros: Macros { Macros(kcal: kcal, protein: protein, carbs: carbs, fat: fat) }
-
+extension SavedMealItem {
     init(foodName: String, grams: Double, macros: Macros, source: FoodSource, thumbnail: Data? = nil) {
-        self.foodName = foodName
-        self.grams = grams
-        kcal = macros.kcal
-        protein = macros.protein
-        carbs = macros.carbs
-        fat = macros.fat
-        sourceRaw = source.rawValue
-        self.thumbnail = thumbnail
+        self.init(foodName: foodName, grams: grams, macros: macros, sourceRaw: source.rawValue, thumbnail: thumbnail)
     }
 
     init(entry: LogEntry) {

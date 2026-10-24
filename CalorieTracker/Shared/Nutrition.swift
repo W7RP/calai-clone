@@ -1,7 +1,7 @@
 import Foundation
 
 /// kcal plus grams of protein, carbs and fat.
-struct Macros: Equatable, Sendable {
+struct Macros: Codable, Equatable, Sendable {
     var kcal: Double
     var protein: Double
     var carbs: Double

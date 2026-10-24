@@ -6,3 +6,5 @@ DerivedData/
 *.ipa
 .DS_Store
 xcuserdata/
+Widgets/Info.plist
+*.entitlements
