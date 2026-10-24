@@ -1,24 +1,23 @@
-# Calorie tracker project kit
+# Calorie tracker
 
-Starter layout for a personal iOS calorie tracker. Nothing here is app code yet.
+Native SwiftUI calorie tracker for iOS 26+. Log food by barcode scan, photo, or manual entry. AI estimates are bring-your-own: sign in with ChatGPT (uses your plan) or paste your own Claude, OpenAI, Gemini or OpenAI-compatible key. No subscription, no backend.
 
-```
-CLAUDE.md                  rules for Claude Code in this repo
-docs/                      spec, architecture, OpenAI sign-in notes, open questions
-.claude/skills/            four Swift skills (MIT, from Paul Hudson and Daniel Eden)
-claude-project/
-  instructions.md          paste into a claude.ai Project's instructions
-```
+## Docs
+- `docs/spec.md`: what the app does and what it doesn't
+- `docs/architecture.md`: modules, data model, build phases
+- `docs/openai-signin.md`: ChatGPT sign-in flow and its limits
+- `docs/ai-providers.md`: provider layer, prompt, schema, validation and retry
+- `docs/open-questions.md`: unresolved decisions
+- `docs/testing-on-iphone.md`: getting a build onto the phone
 
-## Use it as a claude.ai Project
-1. Create a Project, paste `claude-project/instructions.md` into its instructions.
-2. Upload the four files in `docs/` as project knowledge.
+## Rules
+- No bundled keys or secrets. The ChatGPT token set and any pasted keys live only in the Keychain.
+- Never log tokens, API keys or request bodies. Keys go in headers, never URLs.
+- iOS 26+, Swift 6 strict concurrency, SwiftUI + SwiftData. No third-party packages without a real reason.
+- Metric units by default.
+- AI numbers are estimates. Every AI-produced entry is shown for review and is editable before it's saved.
 
-## Use it with Claude Code
-1. Copy this folder's contents into the repo root (`git init` first).
-2. `.claude/skills/` loads automatically; `CLAUDE.md` is read on startup.
-3. Start with Phase 0 in `docs/architecture.md`.
+## Building
+The Xcode project is generated from `project.yml` by XcodeGen and isn't committed. On a Mac: `brew install xcodegen && xcodegen generate`, then open `CalorieTracker.xcodeproj`.
 
-## Skill sources
-- swiftui-pro, swift-concurrency-pro, swiftdata-pro: github.com/twostraws (Paul Hudson), MIT
-- swiftui-gotchas: github.com/daneden/agent-skills, MIT
+CI (`.github/workflows/build.yml`) builds an unsigned `.ipa` on every PR and push to `main` and uploads it as an artifact. macOS minutes count 10x on a private repo, so keep it to one job.
