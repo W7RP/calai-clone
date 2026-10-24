@@ -10,12 +10,8 @@ struct SettingsView: View {
                 Section("Goals") {
                     NavigationLink("Daily goal") { GoalsView() }
                 }
-                Section {
-                    NavigationLink("Sign-in test (Phase 0)") { Phase0View() }
-                } header: {
-                    Text("ChatGPT")
-                } footer: {
-                    Text("Temporary screen for checking Sign in with ChatGPT on this phone.")
+                Section("AI logging") {
+                    NavigationLink("ChatGPT") { ChatGPTSettingsView() }
                 }
             }
             .navigationTitle("Settings")
