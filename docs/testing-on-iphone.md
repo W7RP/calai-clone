@@ -1,38 +1,54 @@
-# Getting builds onto the iPhone (Windows, no paid Apple account)
+# Installing on an iPhone (Mac + free Apple ID)
 
-GitHub Actions builds an unsigned `.ipa` on a cloud Mac. AltStore signs it with a free Apple ID and installs it. A free-account signature lasts 7 days; AltStore renews it over Wi-Fi when AltServer is running on the PC.
+Xcode signs and installs the app with a free Apple ID ("Personal Team"). No paid developer account is needed. A free-account build stops opening after 7 days; re-run it from Xcode to renew it. Your data is kept.
 
-Tool details change; if a step below doesn't match what you see, check https://faq.altstore.io first.
+Free sideloading tools (AltStore, SideStore, Sideloadly) have failed to sign in to Apple since about 2026-10-21, so this guide uses Xcode only.
+
+Tested 2026-10-24 with Xcode 27.1 and an iPhone on iOS 26.
 
 ## One-time setup
 
-### On the Windows PC
-1. Install **iTunes** and **iCloud** from Apple's website (the direct downloads, not the Microsoft Store versions; AltServer needs the desktop ones).
-2. Install **AltServer for Windows** from https://altstore.io and start it. It lives in the system tray.
-3. Plug the iPhone in by USB. Open iTunes, select the phone, tick **"Sync with this iPhone over Wi-Fi"**, and click Apply. This is what lets refreshes happen without the cable later.
+### Mac
+1. Install **Xcode** from the App Store (macOS 15.6 or newer). Open it once and install the **iOS** platform when asked.
+2. Install Homebrew from https://brew.sh, and run the "Next steps" commands it prints.
+3. Install the tools and sign in to GitHub (the repo is private):
+   ```
+   brew install gh xcodegen
+   gh auth login
+   ```
+   Choose GitHub.com, HTTPS, yes to authenticating Git, and log in with a web browser.
+4. Get the code and generate the project:
+   ```
+   cd ~
+   gh repo clone W7RP/calai-clone
+   cd calai-clone
+   xcodegen generate
+   open CalorieTracker.xcodeproj
+   ```
 
-### On the iPhone
-4. Unlock the phone and tap **Trust** when asked about the computer.
-5. In the AltServer tray icon: **Install AltStore → (your iPhone)**. Sign in with your Apple ID. (Optional: use a separate Apple ID made just for this.)
-6. On the phone: **Settings → General → VPN & Device Management**, tap your Apple ID, then **Trust**.
-7. **Settings → Privacy & Security → Developer Mode → On**. The phone restarts; confirm when it asks.
-8. Open AltStore once to check it launches.
+### Signing
+5. **Xcode → Settings → Accounts → + → Apple Account**, and sign in with your Apple ID.
+6. Select the **CalorieTracker** project in the sidebar, then the **CalorieTracker** target, then **Signing & Capabilities**. Tick **Automatically manage signing** and set **Team** to your Personal Team.
+   Until the phone is connected you'll see "your team has no devices" and "no profiles found". That's expected.
 
-## Installing a build
-1. On GitHub, open the repo's **Actions** tab, pick the latest green **Build** run, and download the `CalorieTracker-N` artifact under *Artifacts*. GitHub wraps it in a `.zip`; extract it to get `CalorieTracker-N.ipa`.
-2. Get the `.ipa` onto the phone. Easiest: save it to iCloud Drive on the PC, or AirDrop it from the Mac.
-3. On the phone, open **AltStore → My Apps → +**, pick the `.ipa`. AltServer must be running on the PC and the phone on the same Wi-Fi.
-4. Open the app. The build number and commit on screen should match the Actions run you downloaded.
+### iPhone
+7. Plug the phone in, unlock it, and tap **Trust**. Pick the phone in Xcode's device menu at the top of the window. The first time, Xcode prepares the device, which takes a few minutes.
+8. **Settings → Privacy & Security → Developer Mode → On**, then restart and confirm. The option appears once Xcode has seen the phone.
+9. Back in **Signing & Capabilities**, the errors clear. Click **Try Again** if they don't.
 
-Installing a newer build over an existing one keeps the app's data.
+## Running a build
+1. With the phone plugged in and unlocked, press **Cmd+R**.
+2. If macOS asks for your login password for `codesign`, enter it and choose **Always Allow**.
+3. First install only: if the launch is blocked as an untrusted developer, go to **Settings → General → VPN & Device Management** on the phone, tap your Apple ID, then **Trust**. Press Cmd+R again.
 
-## Keeping it alive
-- AltStore refreshes apps in the background when the phone and PC are on the same Wi-Fi and AltServer is running. Leave AltServer set to launch at Windows startup.
-- **My Apps** shows days left. If one gets close to 0, tap **Refresh All** with the PC on.
-- If it does expire, the app just won't open until refreshed. Data isn't lost.
-- Free accounts allow 3 sideloaded apps at once, and AltStore itself counts as one.
+## Updating
+```
+cd ~/calai-clone
+git pull
+```
+Then press Cmd+R. Run `xcodegen generate` only when files were added or removed. It rewrites the project, so set the Team again afterwards (step 6).
 
 ## Troubleshooting
-- *"Could not find AltServer"*: PC and phone on different networks, AltServer not running, or Windows Firewall blocking it. Plugging in by USB always works as a fallback.
-- *"Maximum number of apps"*: remove another sideloaded app.
-- App crashes straight away after install: note the build number and what you saw.
+- *Bundle identifier not available*: change `com.w7rp.calorietracker` in Signing & Capabilities to something unique, such as `com.<yourname>.easycal`.
+- *App won't open after a week*: the free signature expired. Plug in and press Cmd+R.
+- Free accounts allow 3 sideloaded apps per device and 10 app IDs per week.
