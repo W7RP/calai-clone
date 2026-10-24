@@ -1,0 +1,108 @@
+import SwiftData
+import SwiftUI
+
+/// Scan -> local cache -> Open Food Facts -> amount. A miss hands the barcode back for manual entry.
+struct ScanFlowView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+
+    let day: Date
+    let onNotFound: (String) -> Void
+
+    private enum Stage {
+        case scanning
+        case looking(String)
+        case found(FoodAmountView.Choice)
+        case failed(String, barcode: String)
+    }
+
+    @State private var stage = Stage.scanning
+    @State private var typedCode = ""
+
+    var body: some View {
+        NavigationStack {
+            content
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch stage {
+        case .scanning:
+            scanner
+                .navigationTitle("Scan barcode")
+                .navigationBarTitleDisplayMode(.inline)
+        case .looking(let code):
+            ProgressView("Looking up \(code)…")
+        case .found(let choice):
+            FoodAmountView(choice: choice, day: day) { dismiss() }
+        case .failed(let message, let code):
+            ContentUnavailableView {
+                Label("Lookup failed", systemImage: "wifi.exclamationmark")
+            } description: {
+                Text(message)
+            } actions: {
+                Button("Try again") { Task { await lookUp(code) } }
+                Button("Enter manually") { notFound(code) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var scanner: some View {
+        VStack(spacing: 0) {
+            if BarcodeScannerView.isAvailable {
+                BarcodeScannerView { code in Task { await lookUp(code) } }
+                    .ignoresSafeArea(edges: .bottom)
+            } else {
+                ContentUnavailableView("Camera scanning isn't available", systemImage: "barcode.viewfinder",
+                                       description: Text("Type the number under the barcode instead."))
+            }
+            HStack {
+                TextField("Or type the barcode", text: $typedCode)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                Button("Look up") {
+                    if let code = BarcodeNormalizer.normalize(typedCode) { Task { await lookUp(code) } }
+                }
+                .disabled(BarcodeNormalizer.normalize(typedCode) == nil)
+            }
+            .padding()
+            .background(.bar)
+        }
+    }
+
+    private func lookUp(_ code: String) async {
+        stage = .looking(code)
+        if let cached = cachedFood(barcode: code) {
+            stage = .found(.cached(cached))
+            return
+        }
+        do {
+            if let draft = try await OpenFoodFactsClient().product(barcode: code) {
+                stage = .found(.draft(draft))
+            } else {
+                notFound(code)
+            }
+        } catch {
+            stage = .failed(error.localizedDescription, barcode: code)
+        }
+    }
+
+    private func cachedFood(barcode: String) -> FoodItem? {
+        var descriptor = FetchDescriptor<FoodItem>(predicate: #Predicate { $0.barcode == barcode },
+                                                   sortBy: [SortDescriptor(\.lastUsed, order: .reverse)])
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private func notFound(_ code: String) {
+        onNotFound(code)
+        dismiss()
+    }
+}
