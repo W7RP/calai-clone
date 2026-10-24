@@ -1,20 +1,19 @@
-"""Draws the 1024x1024 app icon: a white flame on a green gradient.
+"""Draws the 1024x1024 app icon: a white flame on black.
 
 Run from the repo root: python3 scripts/make_app_icon.py
 Needs Pillow (pip install pillow).
 """
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 SIZE = 1024
 SCALE = 4  # draw large, then downsample for smooth edges
 S = SIZE * SCALE
 OUT = Path("CalorieTracker/Assets.xcassets/AppIcon.appiconset/AppIcon.png")
 
-TOP = (52, 211, 120)
-BOTTOM = (6, 132, 96)
-INNER = (255, 176, 59)
+BACKGROUND = (0, 0, 0)
+FLAME = (255, 255, 255)
 
 
 def cubic(p0, p1, p2, p3, steps=64):
@@ -40,15 +39,6 @@ def path(start, *segments, scale=0.9):
     return pts
 
 
-def gradient():
-    img = Image.new("RGB", (S, S))
-    draw = ImageDraw.Draw(img)
-    for y in range(S):
-        t = y / (S - 1)
-        draw.line([(0, y), (S, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(TOP, BOTTOM)))
-    return img
-
-
 outer = path(
     (0.50, 0.84),
     ((0.32, 0.84), (0.22, 0.71), (0.22, 0.57)),
@@ -66,16 +56,10 @@ inner = path(
     ((0.62, 0.73), (0.58, 0.79), (0.50, 0.79)),
 )
 
-img = gradient()
-
-shadow = Image.new("L", (S, S), 0)
-ImageDraw.Draw(shadow).polygon([(x, y + S * 0.015) for x, y in outer], fill=70)
-shadow = shadow.filter(ImageFilter.GaussianBlur(S * 0.02))
-img.paste((0, 70, 50), mask=shadow)
-
+img = Image.new("RGB", (S, S), BACKGROUND)
 draw = ImageDraw.Draw(img)
-draw.polygon(outer, fill=(255, 255, 255))
-draw.polygon(inner, fill=INNER)
+draw.polygon(outer, fill=FLAME)
+draw.polygon(inner, fill=BACKGROUND)
 
 OUT.parent.mkdir(parents=True, exist_ok=True)
 img.resize((SIZE, SIZE), Image.LANCZOS).save(OUT, optimize=True)
