@@ -145,6 +145,7 @@ struct SavedMealView: View {
 
     @State private var meal = Meal.snack
     @State private var loaded = false
+    @State private var editing: EditedItem?
 
     var body: some View {
         Form {
@@ -152,18 +153,25 @@ struct SavedMealView: View {
                 TextField("Name", text: $saved.name)
             }
             Section {
-                ForEach(Array(saved.items.enumerated()), id: \.offset) { _, item in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.foodName)
-                            Text("\(NumberInput.format(item.grams)) g · P \(Format.grams(item.protein)) · C \(Format.grams(item.carbs)) · F \(Format.grams(item.fat))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                ForEach(Array(saved.items.enumerated()), id: \.offset) { index, item in
+                    Button {
+                        editing = EditedItem(index: index)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.foodName)
+                                Text("\(AmountText.describe(grams: item.grams, entered: item.entered)) · P \(Format.grams(item.protein)) · C \(Format.grams(item.carbs)) · F \(Format.grams(item.fat))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text("\(Format.kcal(item.kcal)) kcal")
+                                .monospacedDigit()
                         }
-                        Spacer()
-                        Text("\(Format.kcal(item.kcal)) kcal")
-                            .monospacedDigit()
+                        .contentShape(.rect)
                     }
+                    .tint(.primary)
+                    .accessibilityHint("Change the amount")
                 }
                 .onDelete { offsets in
                     var items = saved.items
@@ -194,10 +202,78 @@ struct SavedMealView: View {
         .themedList()
         .navigationTitle(saved.name.isEmpty ? "Saved meal" : saved.name)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $editing) { target in
+            if saved.items.indices.contains(target.index) {
+                SavedItemEditor(item: saved.items[target.index]) { updated in
+                    var items = saved.items
+                    guard items.indices.contains(target.index) else { return }
+                    items[target.index] = updated
+                    saved.items = items
+                }
+            }
+        }
         .onAppear {
             guard !loaded else { return }
             loaded = true
             meal = saved.meal
         }
+    }
+}
+
+private struct EditedItem: Identifiable {
+    let index: Int
+    var id: Int { index }
+}
+
+/// Changes how much of one food a saved meal holds. Nutrition scales with the amount.
+private struct SavedItemEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    let item: SavedMealItem
+    let onSave: (SavedMealItem) -> Void
+    @State private var nutrition: NutritionInput
+
+    init(item: SavedMealItem, onSave: @escaping (SavedMealItem) -> Void) {
+        self.item = item
+        self.onSave = onSave
+        _nutrition = State(initialValue: NutritionInput(amount: item.amountInput, macros: item.macros))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Amount") {
+                    AmountControl(amount: $nutrition.amount)
+                }
+                Section {
+                    NumberField(label: "Energy", unit: "kcal", text: $nutrition.kcal)
+                    NumberField(label: "Protein", unit: "g", text: $nutrition.protein, optional: true)
+                    NumberField(label: "Carbs", unit: "g", text: $nutrition.carbs, optional: true)
+                    NumberField(label: "Fat", unit: "g", text: $nutrition.fat, optional: true)
+                } header: {
+                    Text("Nutrition for this amount")
+                } footer: {
+                    Text("Change the amount and these scale with it.")
+                }
+            }
+            .themedList()
+            .navigationTitle(item.foodName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        guard let macros = nutrition.macros else { return }
+                        var updated = item
+                        updated.update(amount: nutrition.amount, macros: macros)
+                        onSave(updated)
+                        dismiss()
+                    }
+                    .disabled(!nutrition.isValid)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }

@@ -8,6 +8,8 @@ struct FoodDraft: Equatable, Sendable {
     var per100g: Macros
     var servingGrams: Double?
     var source: FoodSource
+    /// Grams per mL. 1 for drinks and other liquids, whose values OFF gives per 100 mL.
+    var density: Double? = nil
 }
 
 /// Product lookup by barcode. Free and keyless; asks for a descriptive User-Agent.
@@ -22,7 +24,7 @@ struct OpenFoodFactsClient: Sendable {
         }
     }
 
-    private static let fields = "code,product_name,product_name_en,product_name_fr,brands,nutriments,serving_quantity"
+    private static let fields = "code,product_name,product_name_en,product_name_fr,brands,nutriments,serving_quantity,serving_quantity_unit,product_quantity_unit"
 
     /// Nil when the product isn't in the database or has no usable energy value.
     func product(barcode: String) async throws -> FoodDraft? {
@@ -76,7 +78,17 @@ struct OpenFoodFactsClient: Sendable {
                             carbs: number(nutriments["carbohydrates_100g"]) ?? 0,
                             fat: number(nutriments["fat_100g"]) ?? 0),
             servingGrams: number(product["serving_quantity"]).flatMap { $0 > 0 ? $0 : nil },
-            source: .off)
+            source: .off,
+            density: isLiquid(product) ? 1 : nil)
+    }
+
+    /// Liquids are sold and labelled by volume. OFF keeps their values under the _100g keys but they're
+    /// per 100 mL, so 1 g per mL makes a volume come out right.
+    private static func isLiquid(_ product: [String: Any]) -> Bool {
+        let volumes: Set<String> = ["ml", "cl", "dl", "l", "fl oz"]
+        return ["serving_quantity_unit", "product_quantity_unit"].contains { key in
+            (product[key] as? String).map { volumes.contains($0.lowercased().trimmingCharacters(in: .whitespaces)) } ?? false
+        }
     }
 
     /// OFF sends numbers either as JSON numbers or as strings, sometimes with a comma.

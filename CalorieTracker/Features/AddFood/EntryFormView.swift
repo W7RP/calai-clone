@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// Manual add and edit. Numbers are typed for the amount eaten, not per 100 g.
+/// Manual add and edit. Numbers are typed for the amount eaten, not per 100 g, and follow the amount when it changes.
 struct EntryFormView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -9,11 +9,7 @@ struct EntryFormView: View {
     let editor: EntryEditor
 
     @State private var name = ""
-    @State private var grams = ""
-    @State private var kcal = ""
-    @State private var protein = ""
-    @State private var carbs = ""
-    @State private var fat = ""
+    @State private var nutrition = NutritionInput(amount: AmountInput(grams: 100, measure: FoodMeasure()))
     @State private var meal = Meal.snack
     @State private var date = Date.now
     @State private var loaded = false
@@ -33,14 +29,21 @@ struct EntryFormView: View {
                 Section {
                     TextField("Food", text: $name)
                         .textInputAutocapitalization(.sentences)
-                    NumberField(label: "Amount", unit: "g", text: $grams)
                 }
 
-                Section("Nutrition for this amount") {
-                    NumberField(label: "Energy", unit: "kcal", text: $kcal)
-                    NumberField(label: "Protein", unit: "g", text: $protein, optional: true)
-                    NumberField(label: "Carbs", unit: "g", text: $carbs, optional: true)
-                    NumberField(label: "Fat", unit: "g", text: $fat, optional: true)
+                Section("Amount") {
+                    AmountControl(amount: $nutrition.amount)
+                }
+
+                Section {
+                    NumberField(label: "Energy", unit: "kcal", text: $nutrition.kcal)
+                    NumberField(label: "Protein", unit: "g", text: $nutrition.protein, optional: true)
+                    NumberField(label: "Carbs", unit: "g", text: $nutrition.carbs, optional: true)
+                    NumberField(label: "Fat", unit: "g", text: $nutrition.fat, optional: true)
+                } header: {
+                    Text("Nutrition for this amount")
+                } footer: {
+                    Text("Change the amount and these scale with it.")
                 }
 
                 Section {
@@ -80,10 +83,7 @@ struct EntryFormView: View {
     }
 
     private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
-            && NumberInput.parse(grams) != nil
-            && NumberInput.parse(kcal) != nil
-            && [protein, carbs, fat].allSatisfy { $0.isEmpty || NumberInput.parse($0) != nil }
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && nutrition.isValid
     }
 
     private func load() {
@@ -94,39 +94,35 @@ struct EntryFormView: View {
             date = Self.combine(day: day, timeFrom: .now)
             meal = Meal.suggested(for: date)
             self.barcode = barcode
+            nutrition = NutritionInput(amount: AmountInput(grams: 0, measure: FoodMeasure()))
+            nutrition.amount.text = ""
         case .edit(let entry):
             name = entry.foodName
-            grams = NumberInput.format(entry.grams)
-            kcal = NumberInput.format(entry.kcal)
-            protein = NumberInput.format(entry.protein)
-            carbs = NumberInput.format(entry.carbs)
-            fat = NumberInput.format(entry.fat)
+            nutrition = NutritionInput(amount: entry.amountInput, macros: entry.macros)
             meal = entry.meal
             date = entry.date
         }
     }
 
     private func save() {
-        guard let amount = NumberInput.parse(grams), let energy = NumberInput.parse(kcal) else { return }
-        let macros = Macros(kcal: energy,
-                            protein: NumberInput.parse(protein) ?? 0,
-                            carbs: NumberInput.parse(carbs) ?? 0,
-                            fat: NumberInput.parse(fat) ?? 0)
+        guard let amount = nutrition.amount.grams, let macros = nutrition.macros else { return }
         let foodName = name.trimmingCharacters(in: .whitespaces)
+        let entered = nutrition.amount.entered
 
         switch editor {
         case .new:
             var food: FoodItem?
             if let per100g = macros.per100g(fromGrams: amount) {
                 food = FoodCache.upsert(in: context, name: foodName, barcode: barcode, per100g: per100g,
-                                        servingGrams: amount, source: .manual)
+                                        servingGrams: amount, density: nutrition.amount.measure.density, source: .manual)
             }
             context.insert(LogEntry(date: date, meal: meal, foodName: foodName, grams: amount,
-                                    macros: macros, source: .manual, foodItem: food))
+                                    macros: macros, source: .manual, foodItem: food, entered: entered))
         case .edit(let entry):
             entry.foodName = foodName
             entry.grams = amount
             entry.macros = macros
+            entry.entered = entered
             entry.meal = meal
             entry.date = date
         }

@@ -17,6 +17,8 @@ final class FoodItem {
     var carbsPer100g: Double
     var fatPer100g: Double
     var servingGrams: Double?
+    /// Grams per mL, when known. Liquids from Open Food Facts are 1, since their values are per 100 mL.
+    var density: Double?
     var sourceRaw: String
     var lastUsed: Date
 
@@ -24,7 +26,7 @@ final class FoodItem {
     var per100g: Macros { Macros(kcal: kcalPer100g, protein: proteinPer100g, carbs: carbsPer100g, fat: fatPer100g) }
 
     init(name: String, brand: String? = nil, barcode: String? = nil, per100g: Macros,
-         servingGrams: Double? = nil, source: FoodSource, lastUsed: Date = .now) {
+         servingGrams: Double? = nil, density: Double? = nil, source: FoodSource, lastUsed: Date = .now) {
         id = UUID()
         self.name = name
         self.brand = brand
@@ -34,6 +36,7 @@ final class FoodItem {
         carbsPer100g = per100g.carbs
         fatPer100g = per100g.fat
         self.servingGrams = servingGrams
+        self.density = density
         sourceRaw = source.rawValue
         self.lastUsed = lastUsed
     }
@@ -56,6 +59,26 @@ final class LogEntry {
     var aiConfidence: Double?
     /// Small JPEG of the meal photo, shown on the food card. Only set for photo logs.
     var thumbnail: Data?
+    // How the amount was entered (see EnteredAmount). Separate optionals so older stores migrate as is;
+    // entries from before units existed have none and read as grams.
+    var enteredQuantity: Double?
+    var enteredUnitRaw: String?
+    var enteredServingGrams: Double?
+    var enteredDensity: Double?
+
+    var entered: EnteredAmount? {
+        get {
+            guard let enteredQuantity, let enteredUnitRaw else { return nil }
+            return EnteredAmount(quantity: enteredQuantity, unitRaw: enteredUnitRaw,
+                                 servingGrams: enteredServingGrams, density: enteredDensity)
+        }
+        set {
+            enteredQuantity = newValue?.quantity
+            enteredUnitRaw = newValue?.unitRaw
+            enteredServingGrams = newValue?.servingGrams
+            enteredDensity = newValue?.density
+        }
+    }
 
     var meal: Meal {
         get { Meal(rawValue: mealRaw) ?? .snack }
@@ -75,7 +98,8 @@ final class LogEntry {
     }
 
     init(date: Date, meal: Meal, foodName: String, grams: Double, macros: Macros,
-         source: FoodSource, foodItem: FoodItem? = nil, aiConfidence: Double? = nil, thumbnail: Data? = nil) {
+         source: FoodSource, foodItem: FoodItem? = nil, aiConfidence: Double? = nil, thumbnail: Data? = nil,
+         entered: EnteredAmount? = nil) {
         id = UUID()
         self.date = date
         mealRaw = meal.rawValue
@@ -89,6 +113,18 @@ final class LogEntry {
         self.foodItem = foodItem
         self.aiConfidence = aiConfidence
         self.thumbnail = thumbnail
+        enteredQuantity = entered?.quantity
+        enteredUnitRaw = entered?.unitRaw
+        enteredServingGrams = entered?.servingGrams
+        enteredDensity = entered?.density
+    }
+}
+
+extension LogEntry {
+    /// The amount the way it was entered, ready to edit. Older entries offer their own amount as one serving.
+    var amountInput: AmountInput {
+        AmountInput(grams: grams, entered: entered, servingGrams: foodItem?.servingGrams ?? grams,
+                    density: foodItem?.density ?? Density.guess(for: foodName))
     }
 }
 

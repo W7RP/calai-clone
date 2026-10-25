@@ -7,7 +7,8 @@ enum FoodPrompt {
         ("analysis", .string(description: "1-3 short sentences: what is visible, the scale cues used, and key assumptions.")),
         ("items", .array(of: .object([
             ("name", .string(description: "Short food name without the amount, e.g. \"Grilled chicken breast\".")),
-            ("grams", .number(description: "Edible weight eaten, in grams (ml for drinks).")),
+            ("grams", .number(description: "Edible weight eaten, in grams. For drinks, the weight of the volume drunk.")),
+            ("ml", .number(description: "Volume in ml for drinks and foods usually measured by volume (soup, milk, cereal, sauces, oil), else 0.")),
             ("kcal", .number(description: "Energy for this amount.")),
             ("protein_g", .number()),
             ("carbs_g", .number()),
@@ -48,11 +49,13 @@ enum FoodPrompt {
 
     Output rules:
     - Metric units. Numbers are for the portion eaten, not per 100 g. Whole grams and kcal; macros to 0.1 g.
+    - grams is always a weight. For drinks and foods measured by volume also give ml (a 355 ml can of cola is \
+    about 370 g); otherwise ml is 0.
     - Item names in the language of the user's description (English if there is none), without the amount.
     - If no food or drink is identifiable, return an empty items list and say why in note.
     - Reply with one JSON object and nothing else, exactly this shape:
-    {"analysis":string,"items":[{"name":string,"grams":number,"kcal":number,"protein_g":number,"carbs_g":number,\
-    "fat_g":number,"confidence":"high"|"medium"|"low","source":"label"|"estimate"}],"note":string}
+    {"analysis":string,"items":[{"name":string,"grams":number,"ml":number,"kcal":number,"protein_g":number,\
+    "carbs_g":number,"fat_g":number,"confidence":"high"|"medium"|"low","source":"label"|"estimate"}],"note":string}
     """
 
     static func userText(description: String?, hasImage: Bool) -> String {

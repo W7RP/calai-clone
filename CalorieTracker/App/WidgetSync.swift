@@ -91,7 +91,7 @@ enum PendingLogImporter {
                 let photo = photos.flatMap { $0.count == log.items.count ? $0[index] : nil } ?? item.thumbnail
                 context.insert(LogEntry(date: log.date, meal: meal, foodName: item.foodName, grams: item.grams,
                                         macros: item.macros, source: FoodSource(rawValue: item.sourceRaw) ?? .manual,
-                                        thumbnail: photo))
+                                        thumbnail: photo, entered: item.entered))
             }
             if let saved {
                 saved.lastUsed = max(saved.lastUsed, log.date)
