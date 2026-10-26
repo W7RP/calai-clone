@@ -23,11 +23,16 @@ final class FoodItem {
     var servingText: String?
     /// A DensitySource raw value, or "none" once a lookup found nothing. Nil on foods saved before lookups.
     var densitySourceRaw: String?
+    /// Which version of the serving lookup filled this in; older ones are looked up again on the next scan.
+    var lookupVersion: Int?
     var sourceRaw: String
     var lastUsed: Date
 
     var source: FoodSource { FoodSource(rawValue: sourceRaw) ?? .manual }
     var densitySource: DensitySource? { densitySourceRaw.flatMap(DensitySource.init) }
+
+    /// Bumped when the lookup changes in a way that should redo cached products.
+    static let currentLookupVersion = 2
     var per100g: Macros { Macros(kcal: kcalPer100g, protein: proteinPer100g, carbs: carbsPer100g, fat: fatPer100g) }
 
     init(name: String, brand: String? = nil, barcode: String? = nil, per100g: Macros,
@@ -45,6 +50,7 @@ final class FoodItem {
         self.density = density
         self.servingText = servingText
         densitySourceRaw = densitySource?.rawValue
+        lookupVersion = Self.currentLookupVersion
         sourceRaw = source.rawValue
         self.lastUsed = lastUsed
     }

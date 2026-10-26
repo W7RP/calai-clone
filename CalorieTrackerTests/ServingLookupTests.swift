@@ -89,6 +89,16 @@ struct ServingLookupTests {
         #expect(await lookup.complete(draft) == draft)
     }
 
+    @Test func usdaNeverReplacesTheBarcodeServingWeight() async {
+        var granola = cereal(servingText: "118 g")
+        granola.servingGrams = 118
+        let lookup = ServingLookup(usda: { _ in .init(text: "1 cup (250 g)", grams: 250, milliliters: 250) },
+                                   estimator: { nil })
+        let done = await lookup.complete(granola)
+        #expect(done.servingGrams == 118)
+        #expect(done.servingText == "118 g")
+    }
+
     /// A drink whose OFF serving is a bare "100 ml" takes the label's real serving from USDA.
     @Test func milkTakesTheServingFromUSDA() async {
         let milk = FoodDraft(name: "Milk", barcode: "0068200148540", per100g: Macros(kcal: 50, protein: 3.4, carbs: 4.8, fat: 2),

@@ -140,31 +140,39 @@ struct OpenFoodFactsClient: Sendable {
     static func servingMeasures(_ product: [String: Any], servingText: String?) -> ServingMeasures {
         let printed = ServingSize.parse(servingText ?? "")
         let quantity = number(product["serving_quantity"]).flatMap { $0 > 0 ? $0 : nil }
-        let quantityIsVolume = isVolume(product["serving_quantity_unit"])
+        let quantityUnit = (product["serving_quantity_unit"] as? String)?.lowercased().trimmingCharacters(in: .whitespaces)
 
         // Liquids are sold and labelled by volume, and OFF's _100g values for them are per 100 mL, so they
         // count as 1 g per mL and a serving's "grams" are its millilitres.
-        if isLiquid(product) {
-            return ServingMeasures(servingGrams: printed.milliliters ?? quantity ?? printed.grams, density: 1,
+        if isLiquid(product, printed: printed) {
+            return ServingMeasures(servingGrams: quantity ?? printed.milliliters, density: 1,
                                    densitySource: .liquid, servingFromLabel: printed.household)
         }
-        let grams = printed.grams ?? (quantityIsVolume ? nil : quantity)
-        if let grams, let milliliters = printed.milliliters, milliliters > 0, (0.05...2.5).contains(grams / milliliters) {
-            return ServingMeasures(servingGrams: grams, density: grams / milliliters, densitySource: .label,
+        // OFF's own serving weight is what the app always used and is right far more often than not, so a
+        // cup or a guess never replaces it. The printed weight only fills in when OFF has none.
+        let grams = quantityUnit == nil || quantityUnit == "g" ? (quantity ?? printed.grams) : printed.grams
+        // The cup's weight comes from the printed pair: "1 cup (118 g)".
+        if let weight = printed.grams, let milliliters = printed.milliliters, printed.household, milliliters > 0,
+           (0.03...2.5).contains(weight / milliliters) {
+            return ServingMeasures(servingGrams: grams ?? weight, density: weight / milliliters, densitySource: .label,
                                    servingFromLabel: true)
         }
-        // Many entries only keep the weight ("29 g") and drop the "1 cup". The category still says roughly
-        // what a cup weighs, which beats treating cereal as water, until something better is found.
+        // Many entries only keep the weight ("118 g") and drop the "1 cup". The category still says roughly
+        // what a cup weighs, which beats treating granola as water, until something better is found.
         let category = Density.guess(categories: product["categories_tags"] as? [String] ?? [])
-        return ServingMeasures(servingGrams: grams ?? quantity, density: category,
+        return ServingMeasures(servingGrams: grams, density: category,
                                densitySource: category == nil ? nil : .category, servingFromLabel: printed.household)
     }
 
-    private static func isLiquid(_ product: [String: Any]) -> Bool {
-        if isVolume(product["serving_quantity_unit"]) || isVolume(product["product_quantity_unit"]) { return true }
+    /// Only an explicit volume counts. A serving printed in grams is never a liquid, whatever else says so.
+    private static func isLiquid(_ product: [String: Any], printed: ServingSize.Parsed) -> Bool {
+        let quantityUnit = product["serving_quantity_unit"]
+        if isVolume(quantityUnit) { return true }
+        if printed.grams != nil || (quantityUnit as? String)?.lowercased() == "g" { return false }
+        if isVolume(product["product_quantity_unit"]) { return true }
         // "2 L" or "473 mL" on the package, with no weight.
         let size = ServingSize.parse(product["quantity"] as? String ?? "")
-        return size.milliliters != nil && size.grams == nil
+        return size.milliliters != nil && size.grams == nil && !size.household
     }
 
     private static func isVolume(_ unit: Any?) -> Bool {

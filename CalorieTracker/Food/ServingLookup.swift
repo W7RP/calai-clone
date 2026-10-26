@@ -15,8 +15,18 @@ struct ServingLookup: Sendable {
 
         if let barcode = draft.barcode, let serving = await usda(barcode) {
             if needsServing, ServingSize.parse(serving.text).household {
-                result.servingGrams = isLiquid ? (serving.milliliters ?? serving.grams) : (serving.grams ?? result.servingGrams)
-                result.servingText = serving.text
+                // A barcode's own serving weight is never replaced; USDA only fills one that's missing,
+                // or a drink's bare "100 ml" with the label's cup.
+                if isLiquid {
+                    result.servingGrams = serving.milliliters ?? result.servingGrams
+                    result.servingText = serving.text
+                } else if let own = result.servingGrams {
+                    // Same serving described better ("29 g" -> "1 cup (29 g)"): take the description only.
+                    if let grams = serving.grams, abs(grams - own) <= own * 0.02 { result.servingText = serving.text }
+                } else {
+                    result.servingGrams = serving.grams
+                    result.servingText = serving.text
+                }
                 result.servingFromLabel = true
                 needsServing = false
             }

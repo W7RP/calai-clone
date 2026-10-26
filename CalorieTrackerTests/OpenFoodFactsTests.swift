@@ -43,6 +43,23 @@ struct OpenFoodFactsMappingTests {
         #expect(abs((label.density ?? 0) - 0.116) < 0.001)
     }
 
+    /// Vector granola: the barcode's 118 g serving must survive, whatever the cup conversion says.
+    @Test func granolaKeepsItsGramServing() throws {
+        let label = try #require(map(#"{"status":1,"product":{"product_name":"Vector granola","serving_size":"1 cup (118 g)","serving_quantity":118,"serving_quantity_unit":"g","product_quantity_unit":"g","quantity":"500 g","nutriments":{"energy-kcal_100g":420}}}"#))
+        #expect(label.servingGrams == 118)
+        #expect(abs((label.density ?? 0) - 0.472) < 0.001)
+
+        let weightOnly = try #require(map(#"{"status":1,"product":{"product_name":"Vector granola","serving_size":"118 g","serving_quantity":"118","categories_tags":["en:breakfast-cereals","en:granolas"],"nutriments":{"energy-kcal_100g":420}}}"#))
+        #expect(weightOnly.servingGrams == 118)
+        #expect(weightOnly.density == 0.45)
+        #expect(weightOnly.densitySource == .category)
+
+        // A stray volume elsewhere in the entry doesn't turn a serving printed in grams into millilitres.
+        let messy = try #require(map(#"{"status":1,"product":{"product_name":"Vector granola","serving_size":"1 cup (118 g)","serving_quantity":118,"product_quantity_unit":"ml","quantity":"1 L","nutriments":{"energy-kcal_100g":420}}}"#))
+        #expect(messy.servingGrams == 118)
+        #expect(messy.densitySource == .label)
+    }
+
     @Test func milkServingIsItsVolume() throws {
         let milk = try #require(map(#"{"status":1,"product":{"product_name":"Lait 2%","serving_size":"1 tasse (250 mL)","quantity":"2 L","nutriments":{"energy-kcal_100g":50}}}"#))
         #expect(milk.density == 1)
