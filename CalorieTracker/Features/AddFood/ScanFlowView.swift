@@ -92,20 +92,22 @@ struct ScanFlowView: View {
     private func lookUp(_ code: String) async {
         stage = .looking(code)
         if let cached = cachedFood(barcode: code) {
-            // Products saved before serving sizes were read get them filled in once, if the lookup works.
-            // An empty servingText marks one that's been checked and has none.
-            if cached.source == .off, cached.servingText == nil,
+            // Products saved before serving lookups existed get them filled in once, if the lookup works.
+            if cached.source == .off, cached.densitySourceRaw == nil,
                let draft = try? await OpenFoodFactsClient().product(barcode: code) {
-                cached.servingText = draft.servingText ?? ""
-                cached.density = draft.density ?? cached.density
-                cached.servingGrams = draft.servingGrams ?? cached.servingGrams
+                let completed = await ServingLookup().complete(draft)
+                cached.servingText = completed.servingText ?? ""
+                cached.density = completed.density ?? cached.density
+                cached.servingGrams = completed.servingGrams ?? cached.servingGrams
+                cached.densitySourceRaw = completed.densitySource?.rawValue ?? "none"
             }
             stage = .found(.cached(cached))
             return
         }
         do {
             if let draft = try await OpenFoodFactsClient().product(barcode: code) {
-                stage = .found(.draft(draft))
+                // OFF often has the weight of a serving but not the "1 cup" beside it.
+                stage = .found(.draft(await ServingLookup().complete(draft)))
             } else {
                 notFound(code)
             }

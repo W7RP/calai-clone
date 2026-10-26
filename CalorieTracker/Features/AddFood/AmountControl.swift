@@ -4,6 +4,8 @@ import SwiftUI
 /// Works inside a Form row or a card, so every button keeps its own tap area.
 struct AmountControl: View {
     @Binding var amount: AmountInput
+    /// Where the cup weight came from ("from the label"), shown under it.
+    var densityNote: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -60,7 +62,11 @@ struct AmountControl: View {
         } else if amount.unit.isVolume, let each = amount.measure.grams(per: amount.unit) {
             MeasureField(title: "1 \(amount.unit.rawValue) weighs", value: each) { amount.setGramsPerUnit($0) }
                 .id(amount.unit)
-            if amount.assumesWater {
+            if let densityNote, !amount.assumesWater {
+                Text("Weight \(densityNote).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if amount.assumesWater {
                 Label("Guessed as water. Check the label: a cup of cereal or flour weighs far less.",
                       systemImage: "exclamationmark.triangle")
                     .font(.caption)

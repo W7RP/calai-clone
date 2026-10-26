@@ -21,15 +21,18 @@ final class FoodItem {
     var density: Double?
     /// The label's serving as printed, e.g. "1 cup (29 g)". Only for Open Food Facts products.
     var servingText: String?
+    /// A DensitySource raw value, or "none" once a lookup found nothing. Nil on foods saved before lookups.
+    var densitySourceRaw: String?
     var sourceRaw: String
     var lastUsed: Date
 
     var source: FoodSource { FoodSource(rawValue: sourceRaw) ?? .manual }
+    var densitySource: DensitySource? { densitySourceRaw.flatMap(DensitySource.init) }
     var per100g: Macros { Macros(kcal: kcalPer100g, protein: proteinPer100g, carbs: carbsPer100g, fat: fatPer100g) }
 
     init(name: String, brand: String? = nil, barcode: String? = nil, per100g: Macros,
-         servingGrams: Double? = nil, density: Double? = nil, servingText: String? = nil, source: FoodSource,
-         lastUsed: Date = .now) {
+         servingGrams: Double? = nil, density: Double? = nil, servingText: String? = nil,
+         densitySource: DensitySource? = nil, source: FoodSource, lastUsed: Date = .now) {
         id = UUID()
         self.name = name
         self.brand = brand
@@ -41,6 +44,7 @@ final class FoodItem {
         self.servingGrams = servingGrams
         self.density = density
         self.servingText = servingText
+        densitySourceRaw = densitySource?.rawValue
         sourceRaw = source.rawValue
         self.lastUsed = lastUsed
     }

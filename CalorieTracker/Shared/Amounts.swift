@@ -363,6 +363,8 @@ enum ServingSize {
     struct Parsed: Equatable {
         var grams: Double?
         var milliliters: Double?
+        /// A cup, spoon or fl oz was named, so this is how the label itself measures a serving.
+        var household = false
     }
 
     // Longer spellings first so "fl oz" isn't read as "oz" and "tbsp" isn't cut short.
@@ -411,6 +413,7 @@ enum ServingSize {
             }
         }
         if result.milliliters == nil { result.milliliters = household }
+        result.household = household != nil
         return result
     }
 

@@ -211,11 +211,11 @@ struct NutritionInputTests {
 
 struct ServingSizeTests {
     @Test func readsHouseholdMeasureAndWeight() {
-        #expect(ServingSize.parse("1 cup (29 g)") == .init(grams: 29, milliliters: 250))
-        #expect(ServingSize.parse("3/4 cup (30g)") == .init(grams: 30, milliliters: 187.5))
-        #expect(ServingSize.parse("1 1/2 cups (45 g)") == .init(grams: 45, milliliters: 375))
-        #expect(ServingSize.parse("¾ tasse (28 g)") == .init(grams: 28, milliliters: 187.5))
-        #expect(ServingSize.parse("2 c. à soupe (30 g)") == .init(grams: 30, milliliters: 30))
+        #expect(ServingSize.parse("1 cup (29 g)") == .init(grams: 29, milliliters: 250, household: true))
+        #expect(ServingSize.parse("3/4 cup (30g)") == .init(grams: 30, milliliters: 187.5, household: true))
+        #expect(ServingSize.parse("1 1/2 cups (45 g)") == .init(grams: 45, milliliters: 375, household: true))
+        #expect(ServingSize.parse("¾ tasse (28 g)") == .init(grams: 28, milliliters: 187.5, household: true))
+        #expect(ServingSize.parse("2 c. à soupe (30 g)") == .init(grams: 30, milliliters: 30, household: true))
     }
 
     @Test func metricVolumeWinsOverHouseholdMeasure() {
