@@ -6,7 +6,7 @@ enum FoodCache {
     @MainActor
     @discardableResult
     static func upsert(in context: ModelContext, name: String, barcode: String? = nil, per100g: Macros,
-                       servingGrams: Double?, density: Double? = nil, source: FoodSource) -> FoodItem {
+                       measure: FoodMeasure, source: FoodSource) -> FoodItem {
         let raw = source.rawValue
         let sameSource = (try? context.fetch(FetchDescriptor<FoodItem>(predicate: #Predicate { $0.sourceRaw == raw }))) ?? []
         let match = sameSource.first { food in
@@ -20,8 +20,7 @@ enum FoodCache {
         item.proteinPer100g = per100g.protein
         item.carbsPer100g = per100g.carbs
         item.fatPer100g = per100g.fat
-        item.servingGrams = servingGrams
-        item.density = density ?? item.density
+        item.measure = measure
         item.barcode = barcode ?? item.barcode
         item.lastUsed = .now
         return item

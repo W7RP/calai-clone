@@ -8,47 +8,14 @@ struct FoodDraft: Equatable, Sendable {
     var per100g: Macros
     var servingGrams: Double?
     var source: FoodSource
-    /// Grams per mL. 1 for drinks and other liquids, whose values OFF gives per 100 mL.
-    var density: Double? = nil
+    /// Drinks, measured in mL. OFF gives their values per 100 mL.
+    var isLiquid = false
+    /// Grams (mL for drinks) in each cup or spoon the label names, like 118 for "1 cup (118 g)".
+    var unitGrams: [AmountUnit: Double] = [:]
     /// The label's serving as printed, e.g. "1 cup (29 g)".
     var servingText: String? = nil
-    /// Where the density came from, so weaker guesses can be improved and the amount screen can say so.
-    var densitySource: DensitySource? = nil
-    /// True when the printed serving names a cup, spoon or fl oz, so it's the label's own serving.
-    var servingFromLabel = false
-    /// Open Food Facts category tags, for describing the product to the AI when nothing else gives a cup weight.
-    var categories: [String] = []
-}
 
-/// Where a food's grams-per-mL came from, best first.
-enum DensitySource: String, Sendable {
-    /// The serving text gave both a volume and a weight, like "1 cup (29 g)".
-    case label
-    /// A drink or other liquid, whose values are per 100 mL.
-    case liquid
-    /// USDA FoodData Central's household serving for the same barcode.
-    case usda
-    /// The user's AI model, asked what a cup of this product weighs.
-    case ai
-    /// A typical value for the product's category.
-    case category
-    /// Typed in on the amount screen.
-    case user
-
-    /// Finishes "1 cup weighs 29 g, …".
-    var note: String {
-        switch self {
-        case .label: "from the label"
-        case .liquid: "as a liquid"
-        case .usda: "from USDA's data for this barcode"
-        case .ai: "estimated by your AI model"
-        case .category: "typical for this kind of food"
-        case .user: "as you set it"
-        }
-    }
-
-    /// Good enough that nothing else is looked up.
-    var isReliable: Bool { self == .label || self == .liquid || self == .usda || self == .user }
+    var measure: FoodMeasure { FoodMeasure(servingGrams: servingGrams, isLiquid: isLiquid, unitGrams: unitGrams) }
 }
 
 /// Product lookup by barcode. Free and keyless; asks for a descriptive User-Agent.
@@ -63,7 +30,7 @@ struct OpenFoodFactsClient: Sendable {
         }
     }
 
-    private static let fields = "code,product_name,product_name_en,product_name_fr,brands,nutriments,serving_quantity,serving_quantity_unit,serving_size,product_quantity_unit,quantity,categories_tags"
+    private static let fields = "code,product_name,product_name_en,product_name_fr,brands,nutriments,serving_quantity,serving_quantity_unit,serving_size,product_quantity_unit,quantity"
 
     /// Nil when the product isn't in the database or has no usable energy value.
     func product(barcode: String) async throws -> FoodDraft? {
@@ -109,8 +76,7 @@ struct OpenFoodFactsClient: Sendable {
             .map { $0.trimmingCharacters(in: .whitespaces) }
 
         let servingText = (product["serving_size"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let measures = servingMeasures(product, servingText: servingText)
-        let categories = product["categories_tags"] as? [String] ?? []
+        let units = measure(product, servingText: servingText)
 
         return FoodDraft(
             name: names.first ?? "Product \(barcode)",
@@ -120,48 +86,36 @@ struct OpenFoodFactsClient: Sendable {
                             protein: number(nutriments["proteins_100g"]) ?? 0,
                             carbs: number(nutriments["carbohydrates_100g"]) ?? 0,
                             fat: number(nutriments["fat_100g"]) ?? 0),
-            servingGrams: measures.servingGrams,
+            servingGrams: units.servingGrams,
             source: .off,
-            density: measures.density,
-            servingText: servingText?.isEmpty == false ? servingText : nil,
-            densitySource: measures.densitySource,
-            servingFromLabel: measures.servingFromLabel,
-            categories: categories)
+            isLiquid: units.isLiquid,
+            unitGrams: units.unitGrams,
+            servingText: servingText?.isEmpty == false ? servingText : nil)
     }
 
-    /// The serving size and density, from the printed serving ("1 cup (29 g)" gives both) and OFF's own fields.
-    struct ServingMeasures: Equatable {
-        var servingGrams: Double?
-        var density: Double?
-        var densitySource: DensitySource?
-        var servingFromLabel: Bool
-    }
-
-    static func servingMeasures(_ product: [String: Any], servingText: String?) -> ServingMeasures {
+    /// The serving and the units the label gives. Only units printed with an amount are offered: "1 cup (118 g)"
+    /// gives grams, the serving and a 118 g cup; "118 g" alone gives grams and the serving, never a cup.
+    static func measure(_ product: [String: Any], servingText: String?) -> FoodMeasure {
         let printed = ServingSize.parse(servingText ?? "")
         let quantity = number(product["serving_quantity"]).flatMap { $0 > 0 ? $0 : nil }
         let quantityUnit = (product["serving_quantity_unit"] as? String)?.lowercased().trimmingCharacters(in: .whitespaces)
 
-        // Liquids are sold and labelled by volume, and OFF's _100g values for them are per 100 mL, so they
-        // count as 1 g per mL and a serving's "grams" are its millilitres.
+        // Drinks are measured in mL; a cup or spoon on the label is its share of the serving: "1 cup (250 mL)".
         if isLiquid(product, printed: printed) {
-            return ServingMeasures(servingGrams: quantity ?? printed.milliliters, density: 1,
-                                   densitySource: .liquid, servingFromLabel: printed.household)
+            let serving = quantity ?? printed.milliliters
+            var units: [AmountUnit: Double] = [:]
+            if let serving {
+                for (unit, count) in printed.volumes where unit != .milliliters { units[unit] = serving / count }
+            }
+            return FoodMeasure(servingGrams: serving, isLiquid: true, unitGrams: units)
         }
-        // OFF's own serving weight is what the app always used and is right far more often than not, so a
-        // cup or a guess never replaces it. The printed weight only fills in when OFF has none.
+        // OFF's own serving weight is right far more often than not; the printed weight fills in when it has none.
         let grams = quantityUnit == nil || quantityUnit == "g" ? (quantity ?? printed.grams) : printed.grams
-        // The cup's weight comes from the printed pair: "1 cup (118 g)".
-        if let weight = printed.grams, let milliliters = printed.milliliters, printed.household, milliliters > 0,
-           (0.03...2.5).contains(weight / milliliters) {
-            return ServingMeasures(servingGrams: grams ?? weight, density: weight / milliliters, densitySource: .label,
-                                   servingFromLabel: true)
+        var units: [AmountUnit: Double] = [:]
+        if let weight = printed.grams ?? grams {
+            for (unit, count) in printed.volumes { units[unit] = weight / count }
         }
-        // Many entries only keep the weight ("118 g") and drop the "1 cup". The category still says roughly
-        // what a cup weighs, which beats treating granola as water, until something better is found.
-        let category = Density.guess(categories: product["categories_tags"] as? [String] ?? [])
-        return ServingMeasures(servingGrams: grams, density: category,
-                               densitySource: category == nil ? nil : .category, servingFromLabel: printed.household)
+        return FoodMeasure(servingGrams: grams, unitGrams: units)
     }
 
     /// Only an explicit volume counts. A serving printed in grams is never a liquid, whatever else says so.

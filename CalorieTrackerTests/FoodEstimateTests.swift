@@ -44,9 +44,9 @@ struct FoodEstimateParserTests {
         {"items":[{"name":"Milk","grams":258,"ml":250,"kcal":130},{"name":"Toast","grams":30,"ml":0,"kcal":80}]}
         """)
         #expect(estimate.items[0].milliliters == 250)
-        #expect(abs((estimate.items[0].density ?? 0) - 1.032) < 0.001)
+        #expect(abs((estimate.items[0].gramsPerMilliliter ?? 0) - 1.032) < 0.001)
         #expect(estimate.items[1].milliliters == nil)
-        #expect(estimate.items[1].density == nil)
+        #expect(estimate.items[1].gramsPerMilliliter == nil)
     }
 
     @Test func emptyItemsKeepNote() throws {
@@ -124,5 +124,13 @@ struct ReviewItemTests {
         #expect(cola.nutrition.amount.unit == .milliliters)
         #expect(cola.nutrition.amount.text == "355")
         #expect(abs(try #require(cola.parsed).grams - 370) < 0.001)
+    }
+
+    /// No cups or spoons are made up for an estimate; only what the model gave.
+    @Test func offersOnlyTheEstimatesOwnUnits() {
+        #expect(item.nutrition.amount.measure.units == [.grams, .servings])
+        let cola = ReviewItem(EstimatedItem(name: "Cola", grams: 370, macros: Macros(kcal: 150, protein: 0, carbs: 39, fat: 0),
+                                            confidence: .high, fromLabel: false, milliliters: 355))
+        #expect(cola.nutrition.amount.measure.units == [.grams, .servings, .milliliters])
     }
 }

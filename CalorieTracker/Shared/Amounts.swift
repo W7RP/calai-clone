@@ -1,6 +1,6 @@
 import Foundation
 
-/// Units an amount can be entered in. Everything is stored as grams; volumes get there through a density.
+/// Units an amount can be entered in. Everything is stored as grams (mL for drinks); each food says which it offers.
 enum AmountUnit: String, CaseIterable, Identifiable, Sendable {
     case grams = "g"
     case ounces = "oz"
@@ -77,30 +77,39 @@ enum AmountUnit: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// What turns an amount in any unit into grams of one food.
+/// The units one food can be measured in, and the grams in one of each. Only what the food's own data gives:
+/// grams (millilitres for drinks), its serving, and any cup or spoon the label names next to a weight, like
+/// "1 cup (118 g)". Nothing is guessed, so a unit the label doesn't give isn't offered.
 struct FoodMeasure: Equatable, Sendable {
     /// Grams in one serving: the label's serving, or the portion first logged when there's no label.
     var servingGrams: Double?
-    /// Grams per millilitre, when it's known from the label, the AI estimate or the food's name.
-    var density: Double?
+    /// Drinks are measured in mL. Their values are per 100 mL, so a "gram" of one is a millilitre.
+    private(set) var isLiquid: Bool
+    /// Grams in one of each other unit, like 118 for a cup of granola.
+    private(set) var unitGrams: [AmountUnit: Double]
 
-    /// Water. Volumes use it when nothing better is known.
-    static let fallbackDensity = 1.0
-
-    init(servingGrams: Double? = nil, density: Double? = nil) {
-        self.servingGrams = servingGrams.flatMap { $0 > 0 && $0.isFinite ? $0 : nil }
-        self.density = density.flatMap { $0 > 0 && $0.isFinite ? $0 : nil }
+    init(servingGrams: Double? = nil, isLiquid: Bool = false, unitGrams: [AmountUnit: Double] = [:]) {
+        self.servingGrams = servingGrams.flatMap(Self.valid)
+        self.isLiquid = isLiquid
+        let base: AmountUnit = isLiquid ? .milliliters : .grams
+        self.unitGrams = unitGrams.compactMapValues(Self.valid).filter { $0.key != base && $0.key != .servings }
     }
 
+    /// What the amount is stored in: grams, or millilitres for a drink.
+    var baseUnit: AmountUnit { isLiquid ? .milliliters : .grams }
+
+    /// The base unit, the serving, then the label's own units.
     var units: [AmountUnit] {
-        AmountUnit.allCases.filter { $0 != .servings || servingGrams != nil }
+        var units = [baseUnit]
+        if servingGrams != nil { units.append(.servings) }
+        return units + AmountUnit.allCases.filter { unitGrams[$0] != nil }
     }
 
-    /// Grams in one of `unit`, nil for servings when there's no serving size.
+    /// Grams in one of `unit`, nil when this food doesn't offer it.
     func grams(per unit: AmountUnit) -> Double? {
+        if unit == baseUnit { return 1 }
         if unit == .servings { return servingGrams }
-        guard let size = unit.size else { return nil }
-        return unit.isVolume ? size * (density ?? Self.fallbackDensity) : size
+        return unitGrams[unit]
     }
 
     func grams(_ quantity: Double, in unit: AmountUnit) -> Double? {
@@ -111,52 +120,35 @@ struct FoodMeasure: Equatable, Sendable {
         guard let each = self.grams(per: unit), each > 0 else { return nil }
         return grams / each
     }
-}
 
-/// Rough densities for foods often measured with spoons and cups. Only clear name matches; anything else
-/// falls back to water, and the amount screen says so.
-enum Density {
-    /// Grams per millilitre. Earlier entries win, so "peanut butter" is matched before "butter".
-    private static let table: [(words: String, density: Double)] = [
-        ("peanut butter", 1.08), ("almond butter", 1.08), ("beurre d arachide", 1.08),
-        ("butter", 0.96), ("beurre", 0.96),
-        ("oil", 0.92), ("huile", 0.92),
-        ("honey", 1.42), ("miel", 1.42),
-        ("syrup", 1.33), ("sirop", 1.33),
-        ("flour", 0.53), ("farine", 0.53),
-        ("sugar", 0.85), ("sucre", 0.85),
-        ("oats", 0.41), ("granola", 0.45),
-        ("milk", 1.03), ("lait", 1.03),
-        ("yogurt", 1.05), ("yoghurt", 1.05), ("yogourt", 1.05),
-    ]
-
-    /// Open Food Facts category tags, most specific first, to grams per mL.
-    private static let categories: [(tag: String, density: Double)] = [
-        ("en:granolas", 0.45), ("en:granola-cereals", 0.45), ("en:mueslis", 0.4), ("en:rolled-oats", 0.41), ("en:oat-flakes", 0.41),
-        ("en:porridge-oats", 0.41), ("en:puffed-cereals", 0.07),
-        ("en:breakfast-cereals", 0.13),
-        ("en:flours", 0.53), ("en:sugars", 0.85), ("en:rices", 0.85), ("en:nuts", 0.55),
-        ("en:peanut-butters", 1.08), ("en:nut-butters", 1.08), ("en:honeys", 1.42), ("en:syrups", 1.33),
-        ("en:vegetable-oils", 0.92), ("en:butters", 0.96), ("en:yogurts", 1.05), ("en:milks", 1.03),
-        ("en:grated-cheese", 0.4), ("en:shredded-cheese", 0.4),
-    ]
-
-    /// Exact tags, with or without the plural "s", so "en:granola" and "en:granolas" both count.
-    static func guess(categories tags: [String]) -> Double? {
-        let present = Set(tags.map { tag in
-            let lower = tag.lowercased()
-            return lower.hasSuffix("s") ? String(lower.dropLast()) : lower
-        })
-        return categories.first { entry in
-            present.contains(entry.tag.hasSuffix("s") ? String(entry.tag.dropLast()) : entry.tag)
-        }?.density
+    /// Adds `unit` at `grams` each, so an amount entered in it reopens exactly as it was.
+    func including(_ unit: AmountUnit, gramsEach grams: Double) -> FoodMeasure {
+        guard unit != baseUnit, let grams = Self.valid(grams) else { return self }
+        var copy = self
+        if unit == .servings { copy.servingGrams = grams } else { copy.unitGrams[unit] = grams }
+        return copy
     }
 
-    static func guess(for name: String) -> Double? {
-        let words = name.lowercased().split { !$0.isLetter }
-        let padded = " \(words.joined(separator: " ")) "
-        return table.first { padded.contains(" \($0.words) ") }?.density
+    /// The label's units for storing on a food, as "cup=118;tbsp=15".
+    var unitsText: String? {
+        guard !unitGrams.isEmpty else { return nil }
+        return AmountUnit.allCases.compactMap { unit in
+            unitGrams[unit].map { "\(unit.rawValue)=\($0)" }
+        }.joined(separator: ";")
     }
+
+    static func unitGrams(from text: String?) -> [AmountUnit: Double] {
+        var result: [AmountUnit: Double] = [:]
+        for pair in (text ?? "").split(separator: ";") {
+            let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let unit = AmountUnit(rawValue: parts[0]),
+                  let grams = NumberInput.parse(parts[1]) else { continue }
+            result[unit] = grams
+        }
+        return result
+    }
+
+    private static func valid(_ value: Double) -> Double? { value > 0 && value.isFinite ? value : nil }
 }
 
 /// An amount being typed: the number as text so half-typed values survive, its unit, and the food's measures.
@@ -166,9 +158,9 @@ struct AmountInput: Equatable, Sendable {
     private(set) var measure: FoodMeasure
 
     /// Shows `grams` in `unit`, or the exact quantity first entered when it still matches.
-    init(grams: Double, measure: FoodMeasure, unit: AmountUnit = .grams, quantity: Double? = nil) {
+    init(grams: Double, measure: FoodMeasure, unit: AmountUnit? = nil, quantity: Double? = nil) {
         self.measure = measure
-        let unit = measure.units.contains(unit) ? unit : .grams
+        let unit = unit.flatMap { measure.units.contains($0) ? $0 : nil } ?? measure.baseUnit
         self.unit = unit
         if let quantity, let back = measure.grams(quantity, in: unit), abs(back - grams) <= max(0.5, grams * 0.005) {
             text = NumberInput.format(quantity, maxFractionDigits: 2)
@@ -177,13 +169,17 @@ struct AmountInput: Equatable, Sendable {
         }
     }
 
-    /// Reopens an amount the way it was entered.
-    init(grams: Double, entered: EnteredAmount?, servingGrams: Double?, density: Double?) {
-        let measure = FoodMeasure(servingGrams: entered?.servingGrams ?? servingGrams,
-                                  density: entered?.density ?? density)
-        self.init(grams: grams, measure: measure,
-                  unit: entered.flatMap { AmountUnit(rawValue: $0.unitRaw) } ?? .grams,
-                  quantity: entered?.quantity)
+    /// Reopens an amount the way it was entered. The unit it was entered in is kept at what it weighed then,
+    /// even if the food no longer lists it.
+    init(grams: Double, entered: EnteredAmount?, measure: FoodMeasure) {
+        var measure = measure
+        if let servingGrams = entered?.servingGrams, measure.servingGrams == nil { measure.servingGrams = servingGrams }
+        guard let entered, entered.quantity > 0, let unit = AmountUnit(rawValue: entered.unitRaw) else {
+            self.init(grams: grams, measure: measure)
+            return
+        }
+        self.init(grams: grams, measure: measure.including(unit, gramsEach: grams / entered.quantity),
+                  unit: unit, quantity: entered.quantity)
     }
 
     var quantity: Double? { NumberInput.parse(text) }
@@ -211,41 +207,17 @@ struct AmountInput: Equatable, Sendable {
         set(max(0, (base + Double(direction)) * size))
     }
 
-    /// Sets the grams in one serving. The number of servings stays, so the grams follow.
-    mutating func setServingGrams(_ grams: Double) {
-        guard grams > 0, grams.isFinite else { return }
-        measure.servingGrams = grams
-    }
-
-    /// Sets what one of the current volume unit weighs, which fixes the food's density.
-    mutating func setGramsPerUnit(_ grams: Double) {
-        guard unit.isVolume, let size = unit.size, grams > 0, grams.isFinite else { return }
-        measure.density = grams / size
-    }
-
-    /// Makes the current amount one serving, for labels that give a serving as "1 cup".
-    mutating func makeOneServing() {
-        guard let grams, grams > 0 else { return }
-        measure.servingGrams = grams
-        unit = .servings
-        text = "1"
-    }
-
     /// How this was entered, to store next to the grams.
     var entered: EnteredAmount? {
         guard let quantity else { return nil }
-        return EnteredAmount(quantity: quantity, unitRaw: unit.rawValue,
-                             servingGrams: measure.servingGrams, density: measure.density)
+        return EnteredAmount(quantity: quantity, unitRaw: unit.rawValue, servingGrams: measure.servingGrams)
     }
 
-    /// The grams behind a unit that isn't grams.
+    /// The grams (or mL, for a drink) behind any other unit.
     var hint: String? {
-        guard unit != .grams, let grams else { return nil }
-        return "= \(NumberInput.format(grams, maxFractionDigits: 0)) g"
+        guard unit != measure.baseUnit, let grams else { return nil }
+        return "= \(NumberInput.format(grams, maxFractionDigits: 0)) \(measure.baseUnit.rawValue)"
     }
-
-    /// True when a volume is converted as if the food were water, because nothing better is known.
-    var assumesWater: Bool { unit.isVolume && measure.density == nil }
 
     /// "1½ cups", "150 g"
     var summary: String {
@@ -270,10 +242,11 @@ enum AmountText {
         return NumberInput.format(value, maxFractionDigits: 2)
     }
 
-    /// "1 cup · 250 g", or "150 g" for amounts entered in grams.
-    static func describe(grams: Double, entered: EnteredAmount?) -> String {
-        let weight = "\(NumberInput.format(grams, maxFractionDigits: 0)) g"
-        guard let entered, let unit = AmountUnit(rawValue: entered.unitRaw), unit != .grams else { return weight }
+    /// "1 cup · 118 g", or "150 g" for amounts entered in grams. Drinks read in mL.
+    static func describe(grams: Double, entered: EnteredAmount?, liquid: Bool = false) -> String {
+        let base: AmountUnit = liquid ? .milliliters : .grams
+        let weight = "\(NumberInput.format(grams, maxFractionDigits: 0)) \(base.rawValue)"
+        guard let entered, let unit = AmountUnit(rawValue: entered.unitRaw), unit != base else { return weight }
         return "\(quantity(entered.quantity)) \(unit.label(for: entered.quantity)) · \(weight)"
     }
 }
@@ -371,21 +344,23 @@ enum ServingSize {
         var milliliters: Double?
         /// A cup, spoon or fl oz was named, so this is how the label itself measures a serving.
         var household = false
+        /// How many of each volume unit the serving is: "3/4 cup (175 mL)" is ¾ cup and 175 mL.
+        var volumes: [AmountUnit: Double] = [:]
     }
 
     // Longer spellings first so "fl oz" isn't read as "oz" and "tbsp" isn't cut short.
     /// `metric` volumes are exact and win over household measures: "8 fl oz (240 mL)" is 240 mL.
-    private static let units: [(pattern: String, grams: Double?, milliliters: Double?, metric: Bool)] = [
-        (#"fl\.?\s*oz"#, nil, 29.5735, false),
-        (#"millilit(?:re|er)s?|ml"#, nil, 1, true),
-        (#"cl"#, nil, 10, true),
-        (#"lit(?:re|er)s?|l"#, nil, 1000, true),
-        (#"cups?|tasses?"#, nil, 250, false),
-        (#"tablespoons?|tbsps?|c\.\s*à\s*(?:soupe|s\.)"#, nil, 15, false),
-        (#"teaspoons?|tsps?|c\.\s*à\s*(?:thé|café|c\.|t\.)"#, nil, 5, false),
-        (#"kg"#, 1000, nil, false),
-        (#"grams?|grammes?|gr|g"#, 1, nil, false),
-        (#"oz"#, 28.3495, nil, false),
+    private static let units: [(pattern: String, grams: Double?, milliliters: Double?, metric: Bool, unit: AmountUnit?)] = [
+        (#"fl\.?\s*oz"#, nil, 29.5735, false, .fluidOunces),
+        (#"millilit(?:re|er)s?|ml"#, nil, 1, true, .milliliters),
+        (#"cl"#, nil, 10, true, .milliliters),
+        (#"lit(?:re|er)s?|l"#, nil, 1000, true, .milliliters),
+        (#"cups?|tasses?"#, nil, 250, false, .cups),
+        (#"tablespoons?|tbsps?|c\.\s*à\s*(?:soupe|s\.)"#, nil, 15, false, .tablespoons),
+        (#"teaspoons?|tsps?|c\.\s*à\s*(?:thé|café|c\.|t\.)"#, nil, 5, false, .teaspoons),
+        (#"kg"#, 1000, nil, false, nil),
+        (#"grams?|grammes?|gr|g"#, 1, nil, false, nil),
+        (#"oz"#, 28.3495, nil, false, nil),
     ]
 
     private static var pattern: String {
@@ -410,6 +385,9 @@ enum ServingSize {
                   let quantity = number(String(cleaned[numberRange])), quantity > 0,
                   let unit = units.first(where: { matches($0.pattern, String(cleaned[unitRange])) }) else { continue }
             if let grams = unit.grams, result.grams == nil { result.grams = quantity * grams }
+            if let volume = unit.unit, let milliliters = unit.milliliters, result.volumes[volume] == nil {
+                result.volumes[volume] = unit.metric ? quantity * milliliters : quantity
+            }
             if let milliliters = unit.milliliters {
                 if unit.metric {
                     if result.milliliters == nil { result.milliliters = quantity * milliliters }

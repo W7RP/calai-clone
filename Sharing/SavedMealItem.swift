@@ -34,7 +34,7 @@ struct EnteredAmount: Codable, Equatable, Sendable {
     var quantity: Double
     /// An AmountUnit raw value: "g", "serving", "cup"...
     var unitRaw: String
-    /// Grams in one serving and grams per mL at the time, so the conversion doesn't drift later.
+    /// Grams in one serving at the time, so the serving stays on offer. Grams in the entered unit are
+    /// the amount's grams over `quantity`.
     var servingGrams: Double?
-    var density: Double?
 }

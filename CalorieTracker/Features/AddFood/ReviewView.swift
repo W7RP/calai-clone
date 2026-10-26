@@ -176,7 +176,8 @@ struct ReviewView: View {
             var food: FoodItem?
             if let per100g = parsed.macros.per100g(fromGrams: parsed.grams) {
                 food = FoodCache.upsert(in: context, name: parsed.name, per100g: per100g,
-                                        servingGrams: parsed.grams, density: amount.measure.density, source: .ai)
+                                        measure: FoodMeasure(servingGrams: parsed.grams, unitGrams: amount.measure.unitGrams),
+                                        source: .ai)
             }
             context.insert(LogEntry(date: date, meal: meal, foodName: parsed.name, grams: parsed.grams,
                                     macros: parsed.macros, source: .ai, foodItem: food,
@@ -262,10 +263,12 @@ struct ReviewItem: Identifiable {
 
     init(_ item: EstimatedItem) {
         name = item.name
-        // The estimated portion is one serving, so ½× and 2× are a tap away.
-        let measure = FoodMeasure(servingGrams: item.grams, density: item.density ?? Density.guess(for: item.name))
+        // The estimated portion is one serving, so ½× and 2× are a tap away. A volume is offered only when the
+        // model gave one for this item.
+        let measure = FoodMeasure(servingGrams: item.grams,
+                                  unitGrams: item.gramsPerMilliliter.map { [AmountUnit.milliliters: $0] } ?? [:])
         let amount: AmountInput
-        if let milliliters = item.milliliters, item.density != nil {
+        if let milliliters = item.milliliters, item.gramsPerMilliliter != nil {
             amount = AmountInput(grams: item.grams, measure: measure, unit: .milliliters, quantity: milliliters)
         } else {
             amount = AmountInput(grams: item.grams, measure: measure)

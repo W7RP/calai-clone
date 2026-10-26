@@ -15,7 +15,6 @@ struct FoodAmountView: View {
     let onSaved: () -> Void
 
     @State private var amount = AmountInput(grams: 100, measure: FoodMeasure())
-    @State private var initialDensity: Double?
     @State private var meal = Meal.snack
     @State private var loaded = false
 
@@ -26,15 +25,15 @@ struct FoodAmountView: View {
                     Text(name).font(.headline)
                     if let brand { Text(brand).foregroundStyle(.secondary) }
                 }
-                LabeledContent("Per 100 g", value: summary(per100g))
+                LabeledContent("Per 100 \(measure.baseUnit.rawValue)", value: summary(per100g))
                 if let serving = servingGrams {
-                    LabeledContent("Per serving (\(servingText ?? "\(NumberInput.format(serving)) g"))",
+                    LabeledContent("Per serving (\(servingText ?? "\(NumberInput.format(serving)) \(measure.baseUnit.rawValue)"))",
                                    value: summary(per100g.forGrams(serving)))
                 }
             }
 
             Section("Amount") {
-                AmountControl(amount: $amount, densityNote: densityNote)
+                AmountControl(amount: $amount)
                 Picker("Meal", selection: $meal) {
                     ForEach(Meal.allCases) { Text($0.title).tag($0) }
                 }
@@ -59,10 +58,9 @@ struct FoodAmountView: View {
         .onAppear {
             guard !loaded else { return }
             loaded = true
-            let measure = FoodMeasure(servingGrams: servingGrams, density: density ?? Density.guess(for: name))
-            initialDensity = measure.density
-            amount = servingGrams.map { AmountInput(grams: $0, measure: measure, unit: .servings, quantity: 1) }
-                ?? AmountInput(grams: 100, measure: measure, unit: densitySource == .liquid ? .milliliters : .grams)
+            let measure = self.measure
+            amount = measure.servingGrams.map { AmountInput(grams: $0, measure: measure, unit: .servings, quantity: 1) }
+                ?? AmountInput(grams: 100, measure: measure)
             meal = Meal.suggested(for: .now)
         }
     }
@@ -102,23 +100,11 @@ struct FoodAmountView: View {
         }
     }
 
-    private var densitySource: DensitySource? {
+    /// Only the units this product's own data gives.
+    private var measure: FoodMeasure {
         switch choice {
-        case .cached(let food): food.densitySource
-        case .draft(let draft): draft.densitySource
-        }
-    }
-
-    /// Says where a cup's weight came from, until it's changed here.
-    private var densityNote: String? {
-        guard amount.measure.density == initialDensity else { return DensitySource.user.note }
-        return densitySource?.note
-    }
-
-    private var density: Double? {
-        switch choice {
-        case .cached(let food): food.density
-        case .draft(let draft): draft.density
+        case .cached(let food): food.measure
+        case .draft(let draft): draft.measure
         }
     }
 
@@ -134,14 +120,9 @@ struct FoodAmountView: View {
             food = cached
         case .draft(let draft):
             food = FoodItem(name: draft.name, brand: draft.brand, barcode: draft.barcode, per100g: draft.per100g,
-                            servingGrams: draft.servingGrams, density: draft.density, servingText: draft.servingText,
-                            densitySource: draft.densitySource, source: draft.source)
+                            measure: draft.measure, servingText: draft.servingText, source: draft.source)
             context.insert(food)
         }
-        // Corrections made here (what a cup weighs, what a serving is) are kept for next time.
-        food.servingGrams = amount.measure.servingGrams ?? food.servingGrams
-        food.density = amount.measure.density ?? food.density
-        if amount.measure.density != initialDensity { food.densitySourceRaw = DensitySource.user.rawValue }
         food.lastUsed = .now
         let date = EntryFormView.combine(day: day, timeFrom: .now)
         context.insert(LogEntry(date: date, meal: meal, foodName: food.name, grams: grams,

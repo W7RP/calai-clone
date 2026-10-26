@@ -92,17 +92,11 @@ struct ScanFlowView: View {
     private func lookUp(_ code: String) async {
         stage = .looking(code)
         if let cached = cachedFood(barcode: code) {
-            // Products saved by an older lookup are looked up again once, so a serving saved wrong is
-            // replaced by the barcode's own. A cup weight the user typed is kept.
+            // Products saved by an older version are read again once, so their units are the barcode's own.
             if cached.source == .off, (cached.lookupVersion ?? 0) < FoodItem.currentLookupVersion,
                let draft = try? await OpenFoodFactsClient().product(barcode: code) {
-                let completed = await ServingLookup().complete(draft)
-                cached.servingText = completed.servingText ?? ""
-                cached.servingGrams = completed.servingGrams ?? cached.servingGrams
-                if cached.densitySource != .user {
-                    cached.density = completed.density ?? cached.density
-                    cached.densitySourceRaw = completed.densitySource?.rawValue ?? "none"
-                }
+                cached.servingText = draft.servingText
+                cached.measure = draft.measure
                 cached.lookupVersion = FoodItem.currentLookupVersion
             }
             stage = .found(.cached(cached))
@@ -110,8 +104,7 @@ struct ScanFlowView: View {
         }
         do {
             if let draft = try await OpenFoodFactsClient().product(barcode: code) {
-                // OFF often has the weight of a serving but not the "1 cup" beside it.
-                stage = .found(.draft(await ServingLookup().complete(draft)))
+                stage = .found(.draft(draft))
             } else {
                 notFound(code)
             }

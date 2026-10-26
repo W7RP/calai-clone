@@ -184,7 +184,8 @@ struct FoodCard: View {
                     Label("\(Format.kcal(entry.kcal)) kcal", systemImage: "flame.fill")
                         .font(.headline)
                     Spacer(minLength: 4)
-                    Text(AmountText.describe(grams: entry.grams, entered: entry.entered))
+                    Text(AmountText.describe(grams: entry.grams, entered: entry.entered,
+                                             liquid: entry.foodItem?.isLiquid ?? false))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
