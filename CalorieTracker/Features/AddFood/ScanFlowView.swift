@@ -92,6 +92,13 @@ struct ScanFlowView: View {
     private func lookUp(_ code: String) async {
         stage = .looking(code)
         if let cached = cachedFood(barcode: code) {
+            // Products saved before serving sizes were read get them filled in once, if the lookup works.
+            if cached.source == .off, cached.servingText == nil, cached.density == nil,
+               let draft = try? await OpenFoodFactsClient().product(barcode: code) {
+                cached.servingText = draft.servingText
+                cached.density = draft.density
+                cached.servingGrams = draft.servingGrams ?? cached.servingGrams
+            }
             stage = .found(.cached(cached))
             return
         }

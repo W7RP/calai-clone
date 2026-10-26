@@ -141,7 +141,7 @@ enum Density {
 struct AmountInput: Equatable, Sendable {
     var text: String
     private(set) var unit: AmountUnit
-    let measure: FoodMeasure
+    private(set) var measure: FoodMeasure
 
     /// Shows `grams` in `unit`, or the exact quantity first entered when it still matches.
     init(grams: Double, measure: FoodMeasure, unit: AmountUnit = .grams, quantity: Double? = nil) {
@@ -189,6 +189,26 @@ struct AmountInput: Equatable, Sendable {
         set(max(0, (base + Double(direction)) * size))
     }
 
+    /// Sets the grams in one serving. The number of servings stays, so the grams follow.
+    mutating func setServingGrams(_ grams: Double) {
+        guard grams > 0, grams.isFinite else { return }
+        measure.servingGrams = grams
+    }
+
+    /// Sets what one of the current volume unit weighs, which fixes the food's density.
+    mutating func setGramsPerUnit(_ grams: Double) {
+        guard unit.isVolume, let size = unit.size, grams > 0, grams.isFinite else { return }
+        measure.density = grams / size
+    }
+
+    /// Makes the current amount one serving, for labels that give a serving as "1 cup".
+    mutating func makeOneServing() {
+        guard let grams, grams > 0 else { return }
+        measure.servingGrams = grams
+        unit = .servings
+        text = "1"
+    }
+
     /// How this was entered, to store next to the grams.
     var entered: EnteredAmount? {
         guard let quantity else { return nil }
@@ -196,17 +216,14 @@ struct AmountInput: Equatable, Sendable {
                              servingGrams: measure.servingGrams, density: measure.density)
     }
 
-    /// The grams behind a unit that isn't grams, and what that assumes.
+    /// The grams behind a unit that isn't grams.
     var hint: String? {
         guard unit != .grams, let grams else { return nil }
-        var parts = ["= \(NumberInput.format(grams, maxFractionDigits: 0)) g"]
-        if unit == .servings, let serving = measure.servingGrams {
-            parts.append("1 serving is \(NumberInput.format(serving, maxFractionDigits: 0)) g")
-        } else if unit.isVolume, measure.density == nil {
-            parts.append("assumes 1 g per mL, like water")
-        }
-        return parts.joined(separator: " · ")
+        return "= \(NumberInput.format(grams, maxFractionDigits: 0)) g"
     }
+
+    /// True when a volume is converted as if the food were water, because nothing better is known.
+    var assumesWater: Bool { unit.isVolume && measure.density == nil }
 
     /// "1½ cups", "150 g"
     var summary: String {
@@ -322,5 +339,83 @@ struct NutritionInput: Equatable, Sendable {
                       protein: text(macros.protein, was: old?.protein),
                       carbs: text(macros.carbs, was: old?.carbs),
                       fat: text(macros.fat, was: old?.fat))
+    }
+}
+
+/// Reads a label's serving text, like "1 cup (29 g)", "3/4 tasse (175 mL)" or "2 c. à soupe (30 g)".
+enum ServingSize {
+    struct Parsed: Equatable {
+        var grams: Double?
+        var milliliters: Double?
+    }
+
+    // Longer spellings first so "fl oz" isn't read as "oz" and "tbsp" isn't cut short.
+    /// `metric` volumes are exact and win over household measures: "8 fl oz (240 mL)" is 240 mL.
+    private static let units: [(pattern: String, grams: Double?, milliliters: Double?, metric: Bool)] = [
+        (#"fl\.?\s*oz"#, nil, 29.5735, false),
+        (#"millilit(?:re|er)s?|ml"#, nil, 1, true),
+        (#"cl"#, nil, 10, true),
+        (#"lit(?:re|er)s?|l"#, nil, 1000, true),
+        (#"cups?|tasses?"#, nil, 250, false),
+        (#"tablespoons?|tbsps?|c\.\s*à\s*(?:soupe|s\.)"#, nil, 15, false),
+        (#"teaspoons?|tsps?|c\.\s*à\s*(?:thé|café|c\.|t\.)"#, nil, 5, false),
+        (#"kg"#, 1000, nil, false),
+        (#"grams?|grammes?|gr|g"#, 1, nil, false),
+        (#"oz"#, 28.3495, nil, false),
+    ]
+
+    private static var pattern: String {
+        let number = #"(\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?)"#
+        let unit = "(" + units.map { "(?:\($0.pattern))" }.joined(separator: "|") + ")"
+        return number + #"\s*"# + unit + #"(?![\p{L}])"#
+    }
+
+    static func parse(_ text: String) -> Parsed {
+        var cleaned = text.lowercased().replacingOccurrences(of: ",", with: ".")
+        for (glyph, fraction) in [("¼", " 1/4"), ("½", " 1/2"), ("¾", " 3/4"), ("⅓", " 1/3"), ("⅔", " 2/3")] {
+            cleaned = cleaned.replacingOccurrences(of: glyph, with: fraction)
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
+        var result = Parsed()
+        var household: Double?
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return result }
+        let range = NSRange(cleaned.startIndex..., in: cleaned)
+        for match in regex.matches(in: cleaned, range: range) {
+            guard let numberRange = Range(match.range(at: 1), in: cleaned),
+                  let unitRange = Range(match.range(at: 2), in: cleaned),
+                  let quantity = number(String(cleaned[numberRange])), quantity > 0,
+                  let unit = units.first(where: { matches($0.pattern, String(cleaned[unitRange])) }) else { continue }
+            if let grams = unit.grams, result.grams == nil { result.grams = quantity * grams }
+            if let milliliters = unit.milliliters {
+                if unit.metric {
+                    if result.milliliters == nil { result.milliliters = quantity * milliliters }
+                } else if household == nil {
+                    household = quantity * milliliters
+                }
+            }
+        }
+        if result.milliliters == nil { result.milliliters = household }
+        return result
+    }
+
+    /// "1 1/2" -> 1.5, "3/4" -> 0.75, "30" -> 30.
+    private static func number(_ text: String) -> Double? {
+        let parts = text.split(separator: " ")
+        var total = 0.0
+        for part in parts {
+            let fraction = part.split(separator: "/")
+            if fraction.count == 2, let top = Double(fraction[0]), let bottom = Double(fraction[1]), bottom > 0 {
+                total += top / bottom
+            } else if let value = Double(part) {
+                total += value
+            } else {
+                return nil
+            }
+        }
+        return total
+    }
+
+    private static func matches(_ pattern: String, _ text: String) -> Bool {
+        text.range(of: "^(?:\(pattern))$", options: [.regularExpression, .caseInsensitive]) != nil
     }
 }

@@ -123,6 +123,10 @@ struct EntryFormView: View {
             entry.grams = amount
             entry.macros = macros
             entry.entered = entered
+            // A weight typed for a cup or spoon is kept on the food, so it's right next time too.
+            if nutrition.amount.unit.isVolume, let density = nutrition.amount.measure.density {
+                entry.foodItem?.density = density
+            }
             entry.meal = meal
             entry.date = date
         }

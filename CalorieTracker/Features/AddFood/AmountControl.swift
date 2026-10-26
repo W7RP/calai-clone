@@ -46,12 +46,48 @@ struct AmountControl: View {
             }
             .scrollClipDisabled()
 
-            if let hint = amount.hint {
-                Text(hint)
+            measures
+        }
+    }
+
+    /// What one serving or one cup weighs, editable, since labels and databases are often off or silent.
+    @ViewBuilder
+    private var measures: some View {
+        if amount.unit == .servings, let serving = amount.measure.servingGrams {
+            MeasureField(title: "1 serving is", value: serving) { amount.setServingGrams($0) }
+                .id("serving")
+            hint
+        } else if amount.unit.isVolume, let each = amount.measure.grams(per: amount.unit) {
+            MeasureField(title: "1 \(amount.unit.rawValue) weighs", value: each) { amount.setGramsPerUnit($0) }
+                .id(amount.unit)
+            if amount.assumesWater {
+                Label("Guessed as water. Check the label: a cup of cereal or flour weighs far less.",
+                      systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                    .foregroundStyle(.orange)
             }
+            HStack {
+                hint
+                Spacer()
+                if (amount.grams ?? 0) > 0 {
+                    Button("Make \(amount.summary) 1 serving") { amount.makeOneServing() }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.borderless)
+                        .tint(.primary)
+                }
+            }
+        } else {
+            hint
+        }
+    }
+
+    @ViewBuilder
+    private var hint: some View {
+        if let hint = amount.hint {
+            Text(hint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
     }
 
@@ -76,5 +112,40 @@ struct AmountControl: View {
             return unit.rawValue
         }
         return "\(unit.rawValue) (\(NumberInput.format(grams, maxFractionDigits: 0)) g)"
+    }
+}
+
+/// "1 cup weighs [29] g". Applies each valid number as it's typed; the amount scales from per-gram values,
+/// so half-typed numbers on the way don't leave anything off.
+private struct MeasureField: View {
+    let title: String
+    let onChange: (Double) -> Void
+    @State private var text: String
+
+    init(title: String, value: Double, onChange: @escaping (Double) -> Void) {
+        self.title = title
+        self.onChange = onChange
+        _text = State(initialValue: NumberInput.format(value))
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .foregroundStyle(.secondary)
+            TextField("0", text: $text)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 72)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Theme.quiet, in: .rect(cornerRadius: 8))
+            Text("g")
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+        .monospacedDigit()
+        .onChange(of: text) { _, new in
+            if let value = NumberInput.parse(new), value > 0 { onChange(value) }
+        }
     }
 }

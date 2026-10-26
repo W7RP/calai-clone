@@ -19,6 +19,8 @@ final class FoodItem {
     var servingGrams: Double?
     /// Grams per mL, when known. Liquids from Open Food Facts are 1, since their values are per 100 mL.
     var density: Double?
+    /// The label's serving as printed, e.g. "1 cup (29 g)". Only for Open Food Facts products.
+    var servingText: String?
     var sourceRaw: String
     var lastUsed: Date
 
@@ -26,7 +28,8 @@ final class FoodItem {
     var per100g: Macros { Macros(kcal: kcalPer100g, protein: proteinPer100g, carbs: carbsPer100g, fat: fatPer100g) }
 
     init(name: String, brand: String? = nil, barcode: String? = nil, per100g: Macros,
-         servingGrams: Double? = nil, density: Double? = nil, source: FoodSource, lastUsed: Date = .now) {
+         servingGrams: Double? = nil, density: Double? = nil, servingText: String? = nil, source: FoodSource,
+         lastUsed: Date = .now) {
         id = UUID()
         self.name = name
         self.brand = brand
@@ -37,6 +40,7 @@ final class FoodItem {
         fatPer100g = per100g.fat
         self.servingGrams = servingGrams
         self.density = density
+        self.servingText = servingText
         sourceRaw = source.rawValue
         self.lastUsed = lastUsed
     }

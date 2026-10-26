@@ -28,6 +28,19 @@ struct OpenFoodFactsMappingTests {
         #expect(cheese.density == nil)
     }
 
+    @Test func cerealServingGivesTheDensity() throws {
+        let cereal = try #require(map(#"{"status":1,"product":{"product_name":"Cereal","serving_size":"1 cup (29 g)","serving_quantity":29,"serving_quantity_unit":"g","quantity":"400 g","nutriments":{"energy-kcal_100g":380}}}"#))
+        #expect(cereal.servingGrams == 29)
+        #expect(abs((cereal.density ?? 0) - 0.116) < 0.001)
+        #expect(cereal.servingText == "1 cup (29 g)")
+    }
+
+    @Test func milkServingIsItsVolume() throws {
+        let milk = try #require(map(#"{"status":1,"product":{"product_name":"Lait 2%","serving_size":"1 tasse (250 mL)","quantity":"2 L","nutriments":{"energy-kcal_100g":50}}}"#))
+        #expect(milk.density == 1)
+        #expect(milk.servingGrams == 250)
+    }
+
     @Test func fallsBackToKilojoules() throws {
         let draft = try #require(map(#"{"status":1,"product":{"product_name":"X","nutriments":{"energy_100g":418.4}}}"#))
         #expect(abs(draft.per100g.kcal - 100) < 0.001)

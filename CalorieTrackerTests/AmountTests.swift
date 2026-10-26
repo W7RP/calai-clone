@@ -97,12 +97,46 @@ struct AmountInputTests {
         #expect(amount.text == "0")
     }
 
-    @Test func hintExplainsTheConversion() {
+    @Test func hintGivesTheGrams() {
         #expect(AmountInput(grams: 100, measure: FoodMeasure()).hint == nil)
         let water = AmountInput(grams: 250, measure: FoodMeasure(), unit: .cups)
-        #expect(water.hint == "= 250 g · assumes 1 g per mL, like water")
-        let serving = AmountInput(grams: 60, measure: FoodMeasure(servingGrams: 30), unit: .servings)
-        #expect(serving.hint == "= 60 g · 1 serving is 30 g")
+        #expect(water.hint == "= 250 g")
+        #expect(water.assumesWater)
+        #expect(!AmountInput(grams: 29, measure: FoodMeasure(density: 0.116), unit: .cups).assumesWater)
+    }
+
+    /// The cereal case: a cup isn't 250 g. Saying what it weighs fixes the cup and everything scaled from it.
+    @Test func correctingWhatACupWeighs() {
+        var cereal = NutritionInput(amount: AmountInput(grams: 29, measure: FoodMeasure(servingGrams: 29), unit: .servings),
+                                    macros: Macros(kcal: 110, protein: 2, carbs: 24, fat: 1))
+        cereal.amount.convert(to: .cups)
+        #expect(cereal.amount.text == "0.12")
+        cereal.amount.set(1)
+        #expect(cereal.kcal == "948")
+        cereal.amount.setGramsPerUnit(29)
+        #expect(abs((cereal.amount.grams ?? 0) - 29) < 0.001)
+        #expect(cereal.kcal == "110")
+        cereal.amount.convert(to: .servings)
+        #expect(cereal.amount.text == "1")
+    }
+
+    @Test func correctingTheServing() {
+        var milk = AmountInput(grams: 250, measure: FoodMeasure(servingGrams: 100, density: 1), unit: .milliliters)
+        milk.convert(to: .servings)
+        #expect(milk.text == "2.5")
+        milk.setServingGrams(250)
+        #expect(milk.grams == 625)
+        milk.set(1)
+        #expect(milk.grams == 250)
+    }
+
+    @Test func makingAVolumeOneServing() {
+        var cereal = AmountInput(grams: 30, measure: FoodMeasure(density: 0.12), unit: .cups, quantity: 1)
+        cereal.makeOneServing()
+        #expect(cereal.unit == .servings)
+        #expect(cereal.text == "1")
+        #expect(abs((cereal.measure.servingGrams ?? 0) - 30) < 0.001)
+        #expect(abs((cereal.grams ?? 0) - 30) < 0.001)
     }
 }
 
@@ -172,5 +206,27 @@ struct NutritionInputTests {
         nutrition.amount.set(2)
         #expect(nutrition.kcal == "248")
         #expect(nutrition.fat == "27.6")
+    }
+}
+
+struct ServingSizeTests {
+    @Test func readsHouseholdMeasureAndWeight() {
+        #expect(ServingSize.parse("1 cup (29 g)") == .init(grams: 29, milliliters: 250))
+        #expect(ServingSize.parse("3/4 cup (30g)") == .init(grams: 30, milliliters: 187.5))
+        #expect(ServingSize.parse("1 1/2 cups (45 g)") == .init(grams: 45, milliliters: 375))
+        #expect(ServingSize.parse("¾ tasse (28 g)") == .init(grams: 28, milliliters: 187.5))
+        #expect(ServingSize.parse("2 c. à soupe (30 g)") == .init(grams: 30, milliliters: 30))
+    }
+
+    @Test func metricVolumeWinsOverHouseholdMeasure() {
+        #expect(ServingSize.parse("1 tasse (250 mL)").milliliters == 250)
+        #expect(ServingSize.parse("8 fl oz (240 mL)").milliliters == 240)
+        #expect(ServingSize.parse("250,5 ml").milliliters == 250.5)
+    }
+
+    @Test func ignoresWordsThatStartLikeUnits() {
+        #expect(ServingSize.parse("1 large egg (50 g)") == .init(grams: 50, milliliters: nil))
+        #expect(ServingSize.parse("1 portion") == .init())
+        #expect(ServingSize.parse("") == .init())
     }
 }

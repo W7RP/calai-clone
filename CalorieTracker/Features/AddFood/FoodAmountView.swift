@@ -27,7 +27,8 @@ struct FoodAmountView: View {
                 }
                 LabeledContent("Per 100 g", value: summary(per100g))
                 if let serving = servingGrams {
-                    LabeledContent("Per serving (\(NumberInput.format(serving)) g)", value: summary(per100g.forGrams(serving)))
+                    LabeledContent("Per serving (\(servingText ?? "\(NumberInput.format(serving)) g"))",
+                                   value: summary(per100g.forGrams(serving)))
                 }
             }
 
@@ -92,6 +93,13 @@ struct FoodAmountView: View {
         }
     }
 
+    private var servingText: String? {
+        switch choice {
+        case .cached(let food): food.servingText
+        case .draft(let draft): draft.servingText
+        }
+    }
+
     private var density: Double? {
         switch choice {
         case .cached(let food): food.density
@@ -111,9 +119,13 @@ struct FoodAmountView: View {
             food = cached
         case .draft(let draft):
             food = FoodItem(name: draft.name, brand: draft.brand, barcode: draft.barcode, per100g: draft.per100g,
-                            servingGrams: draft.servingGrams, density: draft.density, source: draft.source)
+                            servingGrams: draft.servingGrams, density: draft.density, servingText: draft.servingText,
+                            source: draft.source)
             context.insert(food)
         }
+        // Corrections made here (what a cup weighs, what a serving is) are kept for next time.
+        food.servingGrams = amount.measure.servingGrams ?? food.servingGrams
+        food.density = amount.measure.density ?? food.density
         food.lastUsed = .now
         let date = EntryFormView.combine(day: day, timeFrom: .now)
         context.insert(LogEntry(date: date, meal: meal, foodName: food.name, grams: grams,
