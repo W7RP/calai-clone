@@ -25,9 +25,10 @@ struct FoodAmountView: View {
                     Text(name).font(.headline)
                     if let brand { Text(brand).foregroundStyle(.secondary) }
                 }
-                LabeledContent("Per 100 g", value: summary(per100g))
+                LabeledContent("Per 100 \(measure.baseUnit.rawValue)", value: summary(per100g))
                 if let serving = servingGrams {
-                    LabeledContent("Per serving (\(NumberInput.format(serving)) g)", value: summary(per100g.forGrams(serving)))
+                    LabeledContent("Per serving (\(servingText ?? "\(NumberInput.format(serving)) \(measure.baseUnit.rawValue)"))",
+                                   value: summary(per100g.forGrams(serving)))
                 }
             }
 
@@ -57,9 +58,9 @@ struct FoodAmountView: View {
         .onAppear {
             guard !loaded else { return }
             loaded = true
-            let measure = FoodMeasure(servingGrams: servingGrams, density: density ?? Density.guess(for: name))
-            amount = servingGrams.map { AmountInput(grams: $0, measure: measure, unit: .servings, quantity: 1) }
-                ?? AmountInput(grams: 100, measure: measure, unit: density == nil ? .grams : .milliliters)
+            let measure = self.measure
+            amount = measure.servingGrams.map { AmountInput(grams: $0, measure: measure, unit: .servings, quantity: 1) }
+                ?? AmountInput(grams: 100, measure: measure)
             meal = Meal.suggested(for: .now)
         }
     }
@@ -92,10 +93,18 @@ struct FoodAmountView: View {
         }
     }
 
-    private var density: Double? {
+    private var servingText: String? {
         switch choice {
-        case .cached(let food): food.density
-        case .draft(let draft): draft.density
+        case .cached(let food): food.servingText?.isEmpty == false ? food.servingText : nil
+        case .draft(let draft): draft.servingText
+        }
+    }
+
+    /// Only the units this product's own data gives.
+    private var measure: FoodMeasure {
+        switch choice {
+        case .cached(let food): food.measure
+        case .draft(let draft): draft.measure
         }
     }
 
@@ -111,7 +120,7 @@ struct FoodAmountView: View {
             food = cached
         case .draft(let draft):
             food = FoodItem(name: draft.name, brand: draft.brand, barcode: draft.barcode, per100g: draft.per100g,
-                            servingGrams: draft.servingGrams, density: draft.density, source: draft.source)
+                            measure: draft.measure, servingText: draft.servingText, source: draft.source)
             context.insert(food)
         }
         food.lastUsed = .now

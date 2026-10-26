@@ -9,14 +9,14 @@ struct EstimatedItem: Equatable, Sendable {
     var macros: Macros
     var confidence: Confidence
     var fromLabel: Bool
-    /// Volume, for drinks and foods usually measured by volume. Gives the density for cups and spoons.
+    /// Volume, for drinks and foods usually measured by volume, so the item can be entered in mL.
     var milliliters: Double? = nil
 
     /// Grams per mL, when the volume is known and physically plausible.
-    var density: Double? {
+    var gramsPerMilliliter: Double? {
         guard let milliliters, milliliters > 0, grams > 0 else { return nil }
-        let density = grams / milliliters
-        return (0.05...2.5).contains(density) ? density : nil
+        let ratio = grams / milliliters
+        return (0.05...2.5).contains(ratio) ? ratio : nil
     }
 
     /// Stored on LogEntry.aiConfidence.

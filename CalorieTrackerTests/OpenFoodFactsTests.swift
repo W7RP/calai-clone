@@ -21,11 +21,60 @@ struct OpenFoodFactsMappingTests {
         #expect(draft.barcode == "0055577420034")
     }
 
-    @Test func liquidsAreMeasuredLikeWater() throws {
+    @Test func liquidsAreMeasuredInMillilitres() throws {
         let juice = try #require(map(#"{"status":1,"product":{"product_name":"Jus","product_quantity_unit":"mL","serving_quantity":"250","serving_quantity_unit":"ml","nutriments":{"energy-kcal_100g":45}}}"#))
-        #expect(juice.density == 1)
+        #expect(juice.isLiquid)
+        #expect(juice.measure.units == [.milliliters, .servings])
         let cheese = try #require(map(#"{"status":1,"product":{"product_name":"Fromage","product_quantity_unit":"g","nutriments":{"energy-kcal_100g":350}}}"#))
-        #expect(cheese.density == nil)
+        #expect(!cheese.isLiquid)
+        #expect(cheese.measure.units == [.grams])
+    }
+
+    @Test func cerealCupComesFromTheLabel() throws {
+        let cereal = try #require(map(#"{"status":1,"product":{"product_name":"Cereal","serving_size":"1 cup (29 g)","serving_quantity":29,"serving_quantity_unit":"g","quantity":"400 g","nutriments":{"energy-kcal_100g":380}}}"#))
+        #expect(cereal.servingGrams == 29)
+        #expect(cereal.measure.units == [.grams, .servings, .cups])
+        #expect(cereal.measure.grams(per: .cups) == 29)
+        #expect(cereal.servingText == "1 cup (29 g)")
+    }
+
+    /// Vector granola: "1 cup (118 g)" gives grams, the serving and a 118 g cup, and nothing else.
+    @Test func granolaOffersOnlyItsLabelUnits() throws {
+        let label = try #require(map(#"{"status":1,"product":{"product_name":"Vector granola","serving_size":"1 cup (118 g)","serving_quantity":118,"serving_quantity_unit":"g","product_quantity_unit":"g","quantity":"500 g","nutriments":{"energy-kcal_100g":420}}}"#))
+        #expect(label.servingGrams == 118)
+        #expect(label.measure.units == [.grams, .servings, .cups])
+        #expect(label.measure.grams(per: .cups) == 118)
+
+        // A stray volume elsewhere in the entry doesn't turn a serving printed in grams into millilitres.
+        let messy = try #require(map(#"{"status":1,"product":{"product_name":"Vector granola","serving_size":"1 cup (118 g)","serving_quantity":118,"product_quantity_unit":"ml","quantity":"1 L","nutriments":{"energy-kcal_100g":420}}}"#))
+        #expect(messy.servingGrams == 118)
+        #expect(messy.measure.units == [.grams, .servings, .cups])
+    }
+
+    /// With only a weight on the label there's no cup to offer, so none is made up.
+    @Test func weightOnlyServingOffersNoVolumes() throws {
+        let granola = try #require(map(#"{"status":1,"product":{"product_name":"Vector granola","serving_size":"118 g","serving_quantity":"118","nutriments":{"energy-kcal_100g":420}}}"#))
+        #expect(granola.servingGrams == 118)
+        #expect(granola.measure.units == [.grams, .servings])
+    }
+
+    @Test func fractionsOfACupGiveAWholeCup() throws {
+        let oats = try #require(map(#"{"status":1,"product":{"product_name":"Oats","serving_size":"1/2 cup (40 g)","nutriments":{"energy-kcal_100g":380}}}"#))
+        #expect(oats.servingGrams == 40)
+        #expect(oats.measure.grams(per: .cups) == 80)
+        let butter = try #require(map(#"{"status":1,"product":{"product_name":"Peanut butter","serving_size":"2 tbsp (32 g)","serving_quantity":32,"nutriments":{"energy-kcal_100g":600}}}"#))
+        #expect(butter.measure.units == [.grams, .servings, .tablespoons])
+        #expect(butter.measure.grams(per: .tablespoons) == 16)
+    }
+
+    @Test func milkServingIsItsVolume() throws {
+        let milk = try #require(map(#"{"status":1,"product":{"product_name":"Lait 2%","serving_size":"1 tasse (250 mL)","quantity":"2 L","nutriments":{"energy-kcal_100g":50}}}"#))
+        #expect(milk.isLiquid)
+        #expect(milk.servingGrams == 250)
+        #expect(milk.measure.units == [.milliliters, .servings, .cups])
+        #expect(milk.measure.grams(per: .cups) == 250)
+        // 250 mL is one serving and one cup.
+        #expect(milk.measure.quantity(ofGrams: 250, in: .servings) == 1)
     }
 
     @Test func fallsBackToKilojoules() throws {

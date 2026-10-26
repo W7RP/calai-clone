@@ -17,16 +17,39 @@ final class FoodItem {
     var carbsPer100g: Double
     var fatPer100g: Double
     var servingGrams: Double?
-    /// Grams per mL, when known. Liquids from Open Food Facts are 1, since their values are per 100 mL.
-    var density: Double?
+    /// Drinks are measured in mL, and their values are per 100 mL.
+    var isLiquid: Bool?
+    /// The label's cups and spoons with their grams (see FoodMeasure.unitsText), e.g. "cup=118".
+    var unitsText: String?
+    /// The label's serving as printed, e.g. "1 cup (29 g)". Only for Open Food Facts products.
+    var servingText: String?
+    /// Which version of the barcode reading filled this in; older ones are read again on the next scan.
+    var lookupVersion: Int?
     var sourceRaw: String
     var lastUsed: Date
 
     var source: FoodSource { FoodSource(rawValue: sourceRaw) ?? .manual }
+
+    /// Bumped when the barcode reading changes in a way that should redo cached products.
+    static let currentLookupVersion = 3
+
+    /// The units this food offers.
+    var measure: FoodMeasure {
+        get {
+            FoodMeasure(servingGrams: servingGrams, isLiquid: isLiquid ?? false,
+                        unitGrams: FoodMeasure.unitGrams(from: unitsText))
+        }
+        set {
+            servingGrams = newValue.servingGrams
+            isLiquid = newValue.isLiquid
+            unitsText = newValue.unitsText
+        }
+    }
     var per100g: Macros { Macros(kcal: kcalPer100g, protein: proteinPer100g, carbs: carbsPer100g, fat: fatPer100g) }
 
     init(name: String, brand: String? = nil, barcode: String? = nil, per100g: Macros,
-         servingGrams: Double? = nil, density: Double? = nil, source: FoodSource, lastUsed: Date = .now) {
+         measure: FoodMeasure = FoodMeasure(), servingText: String? = nil, source: FoodSource,
+         lastUsed: Date = .now) {
         id = UUID()
         self.name = name
         self.brand = brand
@@ -35,8 +58,11 @@ final class FoodItem {
         proteinPer100g = per100g.protein
         carbsPer100g = per100g.carbs
         fatPer100g = per100g.fat
-        self.servingGrams = servingGrams
-        self.density = density
+        servingGrams = measure.servingGrams
+        isLiquid = measure.isLiquid
+        unitsText = measure.unitsText
+        self.servingText = servingText
+        lookupVersion = Self.currentLookupVersion
         sourceRaw = source.rawValue
         self.lastUsed = lastUsed
     }
@@ -64,19 +90,17 @@ final class LogEntry {
     var enteredQuantity: Double?
     var enteredUnitRaw: String?
     var enteredServingGrams: Double?
-    var enteredDensity: Double?
 
     var entered: EnteredAmount? {
         get {
             guard let enteredQuantity, let enteredUnitRaw else { return nil }
             return EnteredAmount(quantity: enteredQuantity, unitRaw: enteredUnitRaw,
-                                 servingGrams: enteredServingGrams, density: enteredDensity)
+                                 servingGrams: enteredServingGrams)
         }
         set {
             enteredQuantity = newValue?.quantity
             enteredUnitRaw = newValue?.unitRaw
             enteredServingGrams = newValue?.servingGrams
-            enteredDensity = newValue?.density
         }
     }
 
@@ -116,15 +140,15 @@ final class LogEntry {
         enteredQuantity = entered?.quantity
         enteredUnitRaw = entered?.unitRaw
         enteredServingGrams = entered?.servingGrams
-        enteredDensity = entered?.density
     }
 }
 
 extension LogEntry {
     /// The amount the way it was entered, ready to edit. Older entries offer their own amount as one serving.
     var amountInput: AmountInput {
-        AmountInput(grams: grams, entered: entered, servingGrams: foodItem?.servingGrams ?? grams,
-                    density: foodItem?.density ?? Density.guess(for: foodName))
+        var measure = foodItem?.measure ?? FoodMeasure()
+        if measure.servingGrams == nil { measure.servingGrams = grams }
+        return AmountInput(grams: grams, entered: entered, measure: measure)
     }
 }
 

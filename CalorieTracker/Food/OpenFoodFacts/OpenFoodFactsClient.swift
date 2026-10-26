@@ -8,8 +8,14 @@ struct FoodDraft: Equatable, Sendable {
     var per100g: Macros
     var servingGrams: Double?
     var source: FoodSource
-    /// Grams per mL. 1 for drinks and other liquids, whose values OFF gives per 100 mL.
-    var density: Double? = nil
+    /// Drinks, measured in mL. OFF gives their values per 100 mL.
+    var isLiquid = false
+    /// Grams (mL for drinks) in each cup or spoon the label names, like 118 for "1 cup (118 g)".
+    var unitGrams: [AmountUnit: Double] = [:]
+    /// The label's serving as printed, e.g. "1 cup (29 g)".
+    var servingText: String? = nil
+
+    var measure: FoodMeasure { FoodMeasure(servingGrams: servingGrams, isLiquid: isLiquid, unitGrams: unitGrams) }
 }
 
 /// Product lookup by barcode. Free and keyless; asks for a descriptive User-Agent.
@@ -24,7 +30,7 @@ struct OpenFoodFactsClient: Sendable {
         }
     }
 
-    private static let fields = "code,product_name,product_name_en,product_name_fr,brands,nutriments,serving_quantity,serving_quantity_unit,product_quantity_unit"
+    private static let fields = "code,product_name,product_name_en,product_name_fr,brands,nutriments,serving_quantity,serving_quantity_unit,serving_size,product_quantity_unit,quantity"
 
     /// Nil when the product isn't in the database or has no usable energy value.
     func product(barcode: String) async throws -> FoodDraft? {
@@ -69,6 +75,9 @@ struct OpenFoodFactsClient: Sendable {
             .split(separator: ",").first
             .map { $0.trimmingCharacters(in: .whitespaces) }
 
+        let servingText = (product["serving_size"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let units = measure(product, servingText: servingText)
+
         return FoodDraft(
             name: names.first ?? "Product \(barcode)",
             brand: brand?.isEmpty == false ? brand : nil,
@@ -77,18 +86,52 @@ struct OpenFoodFactsClient: Sendable {
                             protein: number(nutriments["proteins_100g"]) ?? 0,
                             carbs: number(nutriments["carbohydrates_100g"]) ?? 0,
                             fat: number(nutriments["fat_100g"]) ?? 0),
-            servingGrams: number(product["serving_quantity"]).flatMap { $0 > 0 ? $0 : nil },
+            servingGrams: units.servingGrams,
             source: .off,
-            density: isLiquid(product) ? 1 : nil)
+            isLiquid: units.isLiquid,
+            unitGrams: units.unitGrams,
+            servingText: servingText?.isEmpty == false ? servingText : nil)
     }
 
-    /// Liquids are sold and labelled by volume. OFF keeps their values under the _100g keys but they're
-    /// per 100 mL, so 1 g per mL makes a volume come out right.
-    private static func isLiquid(_ product: [String: Any]) -> Bool {
-        let volumes: Set<String> = ["ml", "cl", "dl", "l", "fl oz"]
-        return ["serving_quantity_unit", "product_quantity_unit"].contains { key in
-            (product[key] as? String).map { volumes.contains($0.lowercased().trimmingCharacters(in: .whitespaces)) } ?? false
+    /// The serving and the units the label gives. Only units printed with an amount are offered: "1 cup (118 g)"
+    /// gives grams, the serving and a 118 g cup; "118 g" alone gives grams and the serving, never a cup.
+    static func measure(_ product: [String: Any], servingText: String?) -> FoodMeasure {
+        let printed = ServingSize.parse(servingText ?? "")
+        let quantity = number(product["serving_quantity"]).flatMap { $0 > 0 ? $0 : nil }
+        let quantityUnit = (product["serving_quantity_unit"] as? String)?.lowercased().trimmingCharacters(in: .whitespaces)
+
+        // Drinks are measured in mL; a cup or spoon on the label is its share of the serving: "1 cup (250 mL)".
+        if isLiquid(product, printed: printed) {
+            let serving = quantity ?? printed.milliliters
+            var units: [AmountUnit: Double] = [:]
+            if let serving {
+                for (unit, count) in printed.volumes where unit != .milliliters { units[unit] = serving / count }
+            }
+            return FoodMeasure(servingGrams: serving, isLiquid: true, unitGrams: units)
         }
+        // OFF's own serving weight is right far more often than not; the printed weight fills in when it has none.
+        let grams = quantityUnit == nil || quantityUnit == "g" ? (quantity ?? printed.grams) : printed.grams
+        var units: [AmountUnit: Double] = [:]
+        if let weight = printed.grams ?? grams {
+            for (unit, count) in printed.volumes { units[unit] = weight / count }
+        }
+        return FoodMeasure(servingGrams: grams, unitGrams: units)
+    }
+
+    /// Only an explicit volume counts. A serving printed in grams is never a liquid, whatever else says so.
+    private static func isLiquid(_ product: [String: Any], printed: ServingSize.Parsed) -> Bool {
+        let quantityUnit = product["serving_quantity_unit"]
+        if isVolume(quantityUnit) { return true }
+        if printed.grams != nil || (quantityUnit as? String)?.lowercased() == "g" { return false }
+        if isVolume(product["product_quantity_unit"]) { return true }
+        // "2 L" or "473 mL" on the package, with no weight.
+        let size = ServingSize.parse(product["quantity"] as? String ?? "")
+        return size.milliliters != nil && size.grams == nil && !size.household
+    }
+
+    private static func isVolume(_ unit: Any?) -> Bool {
+        let volumes: Set<String> = ["ml", "cl", "dl", "l", "fl oz"]
+        return (unit as? String).map { volumes.contains($0.lowercased().trimmingCharacters(in: .whitespaces)) } ?? false
     }
 
     /// OFF sends numbers either as JSON numbers or as strings, sometimes with a comma.

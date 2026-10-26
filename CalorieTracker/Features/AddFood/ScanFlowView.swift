@@ -92,6 +92,13 @@ struct ScanFlowView: View {
     private func lookUp(_ code: String) async {
         stage = .looking(code)
         if let cached = cachedFood(barcode: code) {
+            // Products saved by an older version are read again once, so their units are the barcode's own.
+            if cached.source == .off, (cached.lookupVersion ?? 0) < FoodItem.currentLookupVersion,
+               let draft = try? await OpenFoodFactsClient().product(barcode: code) {
+                cached.servingText = draft.servingText
+                cached.measure = draft.measure
+                cached.lookupVersion = FoodItem.currentLookupVersion
+            }
             stage = .found(.cached(cached))
             return
         }

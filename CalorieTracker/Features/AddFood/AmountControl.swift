@@ -46,12 +46,17 @@ struct AmountControl: View {
             }
             .scrollClipDisabled()
 
-            if let hint = amount.hint {
-                Text(hint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
+            hint
+        }
+    }
+
+    @ViewBuilder
+    private var hint: some View {
+        if let hint = amount.hint {
+            Text(hint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
     }
 
@@ -70,11 +75,10 @@ struct AmountControl: View {
         .accessibilityLabel(direction > 0 ? "More" : "Less")
     }
 
-    /// "cup (250 g)", "serving (175 g)"; grams and millilitres need no explanation.
+    /// "cup (118 g)", "serving (175 g)"; the base unit needs no explanation.
     private func menuTitle(_ unit: AmountUnit) -> String {
-        guard unit != .grams, unit != .milliliters, let grams = amount.measure.grams(per: unit) else {
-            return unit.rawValue
-        }
-        return "\(unit.rawValue) (\(NumberInput.format(grams, maxFractionDigits: 0)) g)"
+        let base = amount.measure.baseUnit
+        guard unit != base, let grams = amount.measure.grams(per: unit) else { return unit.rawValue }
+        return "\(unit.rawValue) (\(NumberInput.format(grams, maxFractionDigits: 0)) \(base.rawValue))"
     }
 }

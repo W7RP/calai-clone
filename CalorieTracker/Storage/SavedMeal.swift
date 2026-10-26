@@ -15,7 +15,7 @@ extension SavedMealItem {
 
     /// The amount the way it was entered, ready to edit.
     var amountInput: AmountInput {
-        AmountInput(grams: grams, entered: entered, servingGrams: grams, density: Density.guess(for: foodName))
+        AmountInput(grams: grams, entered: entered, measure: FoodMeasure(servingGrams: grams))
     }
 
     /// Takes a new amount and its nutrition, as edited.

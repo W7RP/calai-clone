@@ -2,32 +2,46 @@ import Foundation
 import Testing
 @testable import CalorieTracker
 
-struct AmountUnitTests {
-    @Test func convertsWeightsAndVolumes() throws {
-        let water = FoodMeasure()
-        #expect(water.grams(1, in: .cups) == 250)
-        #expect(water.grams(2, in: .tablespoons) == 30)
-        #expect(abs(try #require(water.grams(1, in: .ounces)) - 28.35) < 0.01)
-        #expect(water.grams(1, in: .servings) == nil)
+struct FoodMeasureTests {
+    private let granola = FoodMeasure(servingGrams: 118, unitGrams: [.cups: 118])
 
-        let oil = FoodMeasure(density: 0.92)
-        #expect(abs(try #require(oil.grams(1, in: .tablespoons)) - 13.8) < 0.001)
-        #expect(abs(try #require(oil.quantity(ofGrams: 27.6, in: .tablespoons)) - 2) < 0.001)
+    @Test func offersOnlyTheUnitsItWasGiven() {
+        #expect(FoodMeasure().units == [.grams])
+        #expect(FoodMeasure(servingGrams: 30).units == [.grams, .servings])
+        #expect(granola.units == [.grams, .servings, .cups])
+        #expect(FoodMeasure().grams(per: .cups) == nil)
+        #expect(FoodMeasure().grams(per: .ounces) == nil)
+    }
+
+    @Test func convertsWithTheLabelsOwnWeights() throws {
+        #expect(granola.grams(0.5, in: .cups) == 59)
+        #expect(granola.grams(1, in: .servings) == 118)
+        #expect(granola.quantity(ofGrams: 236, in: .cups) == 2)
+        let butter = FoodMeasure(servingGrams: 30, unitGrams: [.tablespoons: 15])
+        #expect(butter.grams(1, in: .tablespoons) == 15)
+        #expect(butter.grams(1, in: .teaspoons) == nil)
+    }
+
+    @Test func drinksAreMeasuredInMillilitres() {
+        let milk = FoodMeasure(servingGrams: 250, isLiquid: true, unitGrams: [.cups: 250])
+        #expect(milk.baseUnit == .milliliters)
+        #expect(milk.units == [.milliliters, .servings, .cups])
+        #expect(milk.grams(250, in: .milliliters) == 250)
+        #expect(milk.quantity(ofGrams: 250, in: .servings) == 1)
+        #expect(!milk.units.contains(.grams))
     }
 
     @Test func servingsNeedAServingSize() {
-        #expect(!FoodMeasure().units.contains(.servings))
-        #expect(FoodMeasure(servingGrams: 30).units.contains(.servings))
         #expect(!FoodMeasure(servingGrams: 0).units.contains(.servings))
         #expect(FoodMeasure(servingGrams: 30).grams(1.5, in: .servings) == 45)
     }
 
-    @Test func guessesDensityFromWholeWords() {
-        #expect(Density.guess(for: "Olive oil") == 0.92)
-        #expect(Density.guess(for: "Peanut butter") == 1.08)
-        #expect(Density.guess(for: "Boiled eggs") == nil)
-        #expect(Density.guess(for: "Huile d'olive") == 0.92)
-        #expect(Density.guess(for: "Grilled chicken") == nil)
+    @Test func unitsSurviveStorage() {
+        let text = FoodMeasure(unitGrams: [.cups: 118, .tablespoons: 7.375]).unitsText
+        #expect(text == "cup=118.0;tbsp=7.375")
+        #expect(FoodMeasure.unitGrams(from: text) == [.cups: 118, .tablespoons: 7.375])
+        #expect(FoodMeasure().unitsText == nil)
+        #expect(FoodMeasure.unitGrams(from: "nonsense;cup=x").isEmpty)
     }
 
     @Test func showsFractionsAsGlyphs() {
@@ -40,38 +54,58 @@ struct AmountUnitTests {
 
     @Test func describesEnteredAmounts() {
         #expect(AmountText.describe(grams: 150, entered: nil) == "150 g")
-        let cup = EnteredAmount(quantity: 1.5, unitRaw: "cup", servingGrams: nil, density: nil)
-        #expect(AmountText.describe(grams: 375, entered: cup) == "1½ cups · 375 g")
+        let cup = EnteredAmount(quantity: 1.5, unitRaw: "cup", servingGrams: nil)
+        #expect(AmountText.describe(grams: 177, entered: cup) == "1½ cups · 177 g")
+        #expect(AmountText.describe(grams: 250, entered: cup, liquid: true) == "1½ cups · 250 mL")
+        let millilitres = EnteredAmount(quantity: 250, unitRaw: "mL", servingGrams: nil)
+        #expect(AmountText.describe(grams: 250, entered: millilitres, liquid: true) == "250 mL")
     }
 }
 
 struct AmountInputTests {
-    @Test func changingUnitKeepsTheAmount() throws {
-        var amount = AmountInput(grams: 500, measure: FoodMeasure())
+    private let granola = FoodMeasure(servingGrams: 118, unitGrams: [.cups: 118])
+
+    @Test func changingUnitKeepsTheAmount() {
+        var amount = AmountInput(grams: 236, measure: granola)
         amount.convert(to: .cups)
         #expect(amount.text == "2")
-        #expect(amount.grams == 500)
-        amount.convert(to: .milliliters)
-        #expect(amount.text == "500")
+        #expect(amount.grams == 236)
+        amount.convert(to: .servings)
+        #expect(amount.text == "2")
     }
 
-    @Test func reopensInTheUnitItWasEnteredIn() throws {
-        let entered = EnteredAmount(quantity: 0.75, unitRaw: "cup", servingGrams: nil, density: 0.41)
-        let amount = AmountInput(grams: 76.875, entered: entered, servingGrams: nil, density: nil)
+    @Test func unitsTheFoodDoesntOfferAreRefused() {
+        var amount = AmountInput(grams: 118, measure: FoodMeasure(servingGrams: 118))
+        amount.convert(to: .cups)
+        #expect(amount.unit == .grams)
+        #expect(amount.text == "118")
+        #expect(AmountInput(grams: 118, measure: FoodMeasure(), unit: .cups).unit == .grams)
+    }
+
+    @Test func reopensInTheUnitItWasEnteredIn() {
+        let entered = EnteredAmount(quantity: 0.75, unitRaw: "cup", servingGrams: 118)
+        let amount = AmountInput(grams: 88.5, entered: entered, measure: granola)
         #expect(amount.unit == .cups)
         #expect(amount.text == "0.75")
     }
 
-    @Test func entryChangedElsewhereReopensFromItsGrams() {
-        let entered = EnteredAmount(quantity: 1, unitRaw: "cup", servingGrams: nil, density: 1)
-        let amount = AmountInput(grams: 500, entered: entered, servingGrams: nil, density: nil)
+    /// An entry from before the label's units were read still opens in its unit, at what it weighed then.
+    @Test func reopensAUnitTheFoodNoLongerLists() {
+        let entered = EnteredAmount(quantity: 2, unitRaw: "tbsp", servingGrams: nil)
+        var amount = AmountInput(grams: 32, entered: entered, measure: FoodMeasure(servingGrams: 30))
+        #expect(amount.unit == .tablespoons)
         #expect(amount.text == "2")
+        amount.set(1)
+        #expect(amount.grams == 16)
     }
 
-    @Test func missingServingFallsBackToGrams() {
+    @Test func missingServingFallsBackToTheBaseUnit() {
         let amount = AmountInput(grams: 80, measure: FoodMeasure(), unit: .servings, quantity: 1)
         #expect(amount.unit == .grams)
         #expect(amount.text == "80")
+        let juice = AmountInput(grams: 330, measure: FoodMeasure(isLiquid: true))
+        #expect(juice.unit == .milliliters)
+        #expect(juice.text == "330")
     }
 
     @Test func stepsSnapToTheGrid() {
@@ -81,7 +115,7 @@ struct AmountInputTests {
         amount.step(-1)
         #expect(amount.text == "130")
 
-        var cups = AmountInput(grams: 187.5, measure: FoodMeasure(), unit: .cups)
+        var cups = AmountInput(grams: 88.5, measure: granola, unit: .cups)
         #expect(cups.text == "0.75")
         cups.step(1)
         #expect(cups.text == "1")
@@ -97,12 +131,30 @@ struct AmountInputTests {
         #expect(amount.text == "0")
     }
 
-    @Test func hintExplainsTheConversion() {
+    @Test func hintGivesTheBaseAmount() {
         #expect(AmountInput(grams: 100, measure: FoodMeasure()).hint == nil)
-        let water = AmountInput(grams: 250, measure: FoodMeasure(), unit: .cups)
-        #expect(water.hint == "= 250 g · assumes 1 g per mL, like water")
-        let serving = AmountInput(grams: 60, measure: FoodMeasure(servingGrams: 30), unit: .servings)
-        #expect(serving.hint == "= 60 g · 1 serving is 30 g")
+        #expect(AmountInput(grams: 118, measure: granola, unit: .cups).hint == "= 118 g")
+        let milk = FoodMeasure(servingGrams: 250, isLiquid: true, unitGrams: [.cups: 250])
+        #expect(AmountInput(grams: 500, measure: milk, unit: .cups).hint == "= 500 mL")
+        #expect(AmountInput(grams: 500, measure: milk).hint == nil)
+    }
+
+    /// The bugs that started this: 250 mL of milk read as 2.5 servings, a cup of cereal as 11 servings.
+    @Test func labelServingsLineUp() {
+        let milk = FoodMeasure(servingGrams: 250, isLiquid: true, unitGrams: [.cups: 250])
+        var amount = AmountInput(grams: 250, measure: milk)
+        amount.convert(to: .servings)
+        #expect(amount.text == "1")
+        amount.convert(to: .cups)
+        #expect(amount.text == "1")
+
+        let cereal = FoodMeasure(servingGrams: 29, unitGrams: [.cups: 29])
+        var bowl = NutritionInput(amount: AmountInput(grams: 29, measure: cereal, unit: .servings, quantity: 1),
+                                  macros: Macros(kcal: 110, protein: 2, carbs: 24, fat: 1))
+        bowl.amount.convert(to: .cups)
+        #expect(bowl.amount.text == "1")
+        bowl.amount.set(2)
+        #expect(bowl.kcal == "220")
     }
 }
 
@@ -165,12 +217,37 @@ struct NutritionInputTests {
         #expect(nutrition.isValid)
     }
 
-    @Test func volumeUsesTheDensity() {
-        var nutrition = NutritionInput(amount: AmountInput(grams: 13.8, measure: FoodMeasure(density: 0.92), unit: .tablespoons),
-                                       macros: Macros(kcal: 124, protein: 0, carbs: 0, fat: 13.8))
+    @Test func labelUnitsScaleNutrition() {
+        let oil = FoodMeasure(servingGrams: 14, unitGrams: [.tablespoons: 14])
+        var nutrition = NutritionInput(amount: AmountInput(grams: 14, measure: oil, unit: .tablespoons),
+                                       macros: Macros(kcal: 124, protein: 0, carbs: 0, fat: 14))
         #expect(nutrition.amount.text == "1")
         nutrition.amount.set(2)
         #expect(nutrition.kcal == "248")
-        #expect(nutrition.fat == "27.6")
+        #expect(nutrition.fat == "28")
+    }
+}
+
+struct ServingSizeTests {
+    @Test func readsHouseholdMeasureAndWeight() {
+        #expect(ServingSize.parse("1 cup (29 g)") == .init(grams: 29, milliliters: 250, household: true, volumes: [.cups: 1]))
+        #expect(ServingSize.parse("3/4 cup (30g)") == .init(grams: 30, milliliters: 187.5, household: true, volumes: [.cups: 0.75]))
+        #expect(ServingSize.parse("1 1/2 cups (45 g)") == .init(grams: 45, milliliters: 375, household: true, volumes: [.cups: 1.5]))
+        #expect(ServingSize.parse("¾ tasse (28 g)") == .init(grams: 28, milliliters: 187.5, household: true, volumes: [.cups: 0.75]))
+        #expect(ServingSize.parse("2 c. à soupe (30 g)") == .init(grams: 30, milliliters: 30, household: true, volumes: [.tablespoons: 2]))
+    }
+
+    @Test func metricVolumeWinsOverHouseholdMeasure() {
+        #expect(ServingSize.parse("1 tasse (250 mL)").milliliters == 250)
+        #expect(ServingSize.parse("8 fl oz (240 mL)").milliliters == 240)
+        #expect(ServingSize.parse("250,5 ml").milliliters == 250.5)
+        #expect(ServingSize.parse("8 fl oz (240 mL)").volumes == [.fluidOunces: 8, .milliliters: 240])
+        #expect(ServingSize.parse("33 cl").volumes == [.milliliters: 330])
+    }
+
+    @Test func ignoresWordsThatStartLikeUnits() {
+        #expect(ServingSize.parse("1 large egg (50 g)") == .init(grams: 50, milliliters: nil))
+        #expect(ServingSize.parse("1 portion") == .init())
+        #expect(ServingSize.parse("") == .init())
     }
 }

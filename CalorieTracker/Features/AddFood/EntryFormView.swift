@@ -114,7 +114,7 @@ struct EntryFormView: View {
             var food: FoodItem?
             if let per100g = macros.per100g(fromGrams: amount) {
                 food = FoodCache.upsert(in: context, name: foodName, barcode: barcode, per100g: per100g,
-                                        servingGrams: amount, density: nutrition.amount.measure.density, source: .manual)
+                                        measure: FoodMeasure(servingGrams: amount), source: .manual)
             }
             context.insert(LogEntry(date: date, meal: meal, foodName: foodName, grams: amount,
                                     macros: macros, source: .manual, foodItem: food, entered: entered))
