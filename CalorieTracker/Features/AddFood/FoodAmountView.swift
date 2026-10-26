@@ -95,7 +95,7 @@ struct FoodAmountView: View {
 
     private var servingText: String? {
         switch choice {
-        case .cached(let food): food.servingText
+        case .cached(let food): food.servingText?.isEmpty == false ? food.servingText : nil
         case .draft(let draft): draft.servingText
         }
     }

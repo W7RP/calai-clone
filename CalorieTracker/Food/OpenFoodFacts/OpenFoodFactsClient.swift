@@ -26,7 +26,7 @@ struct OpenFoodFactsClient: Sendable {
         }
     }
 
-    private static let fields = "code,product_name,product_name_en,product_name_fr,brands,nutriments,serving_quantity,serving_quantity_unit,serving_size,product_quantity_unit,quantity"
+    private static let fields = "code,product_name,product_name_en,product_name_fr,brands,nutriments,serving_quantity,serving_quantity_unit,serving_size,product_quantity_unit,quantity,categories_tags"
 
     /// Nil when the product isn't in the database or has no usable energy value.
     func product(barcode: String) async throws -> FoodDraft? {
@@ -104,6 +104,11 @@ struct OpenFoodFactsClient: Sendable {
         if let grams, let milliliters = printed.milliliters, milliliters > 0 {
             let value = grams / milliliters
             density = (0.05...2.5).contains(value) ? value : nil
+        }
+        // Many entries only keep the weight ("29 g") and drop the "1 cup". The category still says roughly
+        // what a cup weighs, which beats treating cereal as water.
+        if density == nil {
+            density = Density.guess(categories: product["categories_tags"] as? [String] ?? [])
         }
         return (grams ?? quantity, density)
     }

@@ -130,6 +130,22 @@ enum Density {
         ("yogurt", 1.05), ("yoghurt", 1.05), ("yogourt", 1.05),
     ]
 
+    /// Open Food Facts category tags, most specific first, to grams per mL.
+    private static let categories: [(tag: String, density: Double)] = [
+        ("en:granolas", 0.45), ("en:mueslis", 0.4), ("en:rolled-oats", 0.41), ("en:oat-flakes", 0.41),
+        ("en:porridge-oats", 0.41), ("en:puffed-cereals", 0.07),
+        ("en:breakfast-cereals", 0.13),
+        ("en:flours", 0.53), ("en:sugars", 0.85), ("en:rices", 0.85), ("en:nuts", 0.55),
+        ("en:peanut-butters", 1.08), ("en:nut-butters", 1.08), ("en:honeys", 1.42), ("en:syrups", 1.33),
+        ("en:vegetable-oils", 0.92), ("en:butters", 0.96), ("en:yogurts", 1.05), ("en:milks", 1.03),
+        ("en:grated-cheese", 0.4), ("en:shredded-cheese", 0.4),
+    ]
+
+    static func guess(categories tags: [String]) -> Double? {
+        let present = Set(tags.map { $0.lowercased() })
+        return categories.first { present.contains($0.tag) }?.density
+    }
+
     static func guess(for name: String) -> Double? {
         let words = name.lowercased().split { !$0.isLetter }
         let padded = " \(words.joined(separator: " ")) "
