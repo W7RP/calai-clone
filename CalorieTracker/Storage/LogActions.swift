@@ -12,7 +12,7 @@ enum LogActions {
         let entries = saved.items.map { item in
             LogEntry(date: date, meal: meal ?? saved.meal, foodName: item.foodName, grams: item.grams,
                      macros: item.macros, source: FoodSource(rawValue: item.sourceRaw) ?? .manual,
-                     thumbnail: item.thumbnail)
+                     thumbnail: item.thumbnail, entered: item.entered)
         }
         for entry in entries { context.insert(entry) }
         saved.lastUsed = now
@@ -25,7 +25,8 @@ enum LogActions {
     static func relog(_ entry: LogEntry, on day: Date, now: Date = .now, in context: ModelContext) -> LogEntry {
         let copy = LogEntry(date: EntryFormView.combine(day: day, timeFrom: now), meal: Meal.suggested(for: now),
                             foodName: entry.foodName, grams: entry.grams, macros: entry.macros, source: entry.source,
-                            foodItem: entry.foodItem, aiConfidence: entry.aiConfidence, thumbnail: entry.thumbnail)
+                            foodItem: entry.foodItem, aiConfidence: entry.aiConfidence, thumbnail: entry.thumbnail,
+                            entered: entry.entered)
         context.insert(copy)
         entry.foodItem?.lastUsed = now
         return copy
@@ -46,7 +47,7 @@ enum LogActions {
             context.insert(LogEntry(date: DayMath.move(entry.date, toDay: day, calendar: calendar), meal: entry.meal,
                                     foodName: entry.foodName, grams: entry.grams, macros: entry.macros,
                                     source: entry.source, foodItem: entry.foodItem, aiConfidence: entry.aiConfidence,
-                                    thumbnail: entry.thumbnail))
+                                    thumbnail: entry.thumbnail, entered: entry.entered))
         }
         return entries.count
     }

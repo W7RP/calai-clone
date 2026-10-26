@@ -172,14 +172,16 @@ struct ReviewView: View {
         let date = EntryFormView.combine(day: day, timeFrom: .now)
         for item in items {
             guard let parsed = item.parsed else { continue }
+            let amount = item.nutrition.amount
             var food: FoodItem?
             if let per100g = parsed.macros.per100g(fromGrams: parsed.grams) {
                 food = FoodCache.upsert(in: context, name: parsed.name, per100g: per100g,
-                                        servingGrams: parsed.grams, source: .ai)
+                                        servingGrams: parsed.grams, density: amount.measure.density, source: .ai)
             }
             context.insert(LogEntry(date: date, meal: meal, foodName: parsed.name, grams: parsed.grams,
                                     macros: parsed.macros, source: .ai, foodItem: food,
-                                    aiConfidence: parsed.confidenceScore, thumbnail: thumbnail))
+                                    aiConfidence: parsed.confidenceScore, thumbnail: thumbnail,
+                                    entered: amount.entered))
         }
         onSaved()
     }
@@ -205,20 +207,12 @@ private struct ReviewItemCard: View {
                 Chip(text: "\(item.confidence.rawValue.capitalized) confidence",
                      symbol: item.confidence == .low ? "exclamationmark.circle" : nil)
             }
-            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-                GridRow {
-                    BoxField(label: "Amount", unit: "g", symbol: "scalemass", text: $item.grams)
-                        .onChange(of: item.grams) { old, new in item.rescale(fromGrams: old, toGrams: new) }
-                    BoxField(label: "Calories", unit: "kcal", symbol: "flame.fill", text: $item.kcal)
-                }
-                GridRow {
-                    HStack(spacing: 8) {
-                        BoxField(label: "Protein", unit: "g", symbol: MacroKind.protein.symbol, text: $item.protein)
-                        BoxField(label: "Carbs", unit: "g", symbol: MacroKind.carbs.symbol, text: $item.carbs)
-                        BoxField(label: "Fat", unit: "g", symbol: MacroKind.fat.symbol, text: $item.fat)
-                    }
-                    .gridCellColumns(2)
-                }
+            AmountControl(amount: $item.nutrition.amount)
+            BoxField(label: "Calories", unit: "kcal", symbol: "flame.fill", text: $item.nutrition.kcal)
+            HStack(spacing: 8) {
+                BoxField(label: "Protein", unit: "g", symbol: MacroKind.protein.symbol, text: $item.nutrition.protein)
+                BoxField(label: "Carbs", unit: "g", symbol: MacroKind.carbs.symbol, text: $item.nutrition.carbs)
+                BoxField(label: "Fat", unit: "g", symbol: MacroKind.fat.symbol, text: $item.nutrition.fat)
             }
         }
         .card()
@@ -261,44 +255,33 @@ struct BoxField: View {
 struct ReviewItem: Identifiable {
     let id = UUID()
     var name: String
-    var grams: String
-    var kcal: String
-    var protein: String
-    var carbs: String
-    var fat: String
+    /// Amount and nutrition, kept in proportion as either is edited.
+    var nutrition: NutritionInput
     let confidence: EstimatedItem.Confidence
     let fromLabel: Bool
 
     init(_ item: EstimatedItem) {
         name = item.name
-        grams = NumberInput.format(item.grams)
-        kcal = NumberInput.format(item.macros.kcal, maxFractionDigits: 0)
-        protein = NumberInput.format(item.macros.protein)
-        carbs = NumberInput.format(item.macros.carbs)
-        fat = NumberInput.format(item.macros.fat)
+        // The estimated portion is one serving, so ½× and 2× are a tap away.
+        let measure = FoodMeasure(servingGrams: item.grams, density: item.density ?? Density.guess(for: item.name))
+        let amount: AmountInput
+        if let milliliters = item.milliliters, item.density != nil {
+            amount = AmountInput(grams: item.grams, measure: measure, unit: .milliliters, quantity: milliliters)
+        } else {
+            amount = AmountInput(grams: item.grams, measure: measure)
+        }
+        nutrition = NutritionInput(amount: amount, macros: item.macros)
         confidence = item.confidence
         fromLabel = item.fromLabel
     }
 
     var parsed: EstimatedItem? {
-        guard let g = NumberInput.parse(grams), let k = NumberInput.parse(kcal),
-              let p = NumberInput.parse(protein), let c = NumberInput.parse(carbs), let f = NumberInput.parse(fat),
-              !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        return EstimatedItem(name: name.trimmingCharacters(in: .whitespaces), grams: g,
-                             macros: Macros(kcal: k, protein: p, carbs: c, fat: f),
-                             confidence: confidence, fromLabel: fromLabel)
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard let grams = nutrition.amount.grams, let macros = nutrition.macros, !trimmed.isEmpty else { return nil }
+        let milliliters = nutrition.amount.unit.isVolume ? nutrition.amount.measure.quantity(ofGrams: grams, in: .milliliters) : nil
+        return EstimatedItem(name: trimmed, grams: grams, macros: macros, confidence: confidence, fromLabel: fromLabel,
+                             milliliters: milliliters)
     }
 
     var isValid: Bool { parsed != nil }
-
-    /// Changing the amount scales the nutrition with it, which is almost always what's meant.
-    mutating func rescale(fromGrams old: String, toGrams new: String) {
-        guard let from = NumberInput.parse(old), let to = NumberInput.parse(new), from > 0, to > 0, from != to,
-              let current = parsed else { return }
-        let scaled = current.macros.scaled(by: to / from)
-        kcal = NumberInput.format(scaled.kcal, maxFractionDigits: 0)
-        protein = NumberInput.format(scaled.protein)
-        carbs = NumberInput.format(scaled.carbs)
-        fat = NumberInput.format(scaled.fat)
-    }
 }

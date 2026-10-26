@@ -9,6 +9,15 @@ struct EstimatedItem: Equatable, Sendable {
     var macros: Macros
     var confidence: Confidence
     var fromLabel: Bool
+    /// Volume, for drinks and foods usually measured by volume. Gives the density for cups and spoons.
+    var milliliters: Double? = nil
+
+    /// Grams per mL, when the volume is known and physically plausible.
+    var density: Double? {
+        guard let milliliters, milliliters > 0, grams > 0 else { return nil }
+        let density = grams / milliliters
+        return (0.05...2.5).contains(density) ? density : nil
+    }
 
     /// Stored on LogEntry.aiConfidence.
     var confidenceScore: Double {
@@ -38,6 +47,7 @@ enum FoodEstimateParser {
             let protein_g: Double?
             let carbs_g: Double?
             let fat_g: Double?
+            let ml: Double?
             let confidence: String?
             let source: String?
         }
@@ -68,7 +78,8 @@ enum FoodEstimateParser {
                 grams: item.grams,
                 macros: Macros(kcal: item.kcal, protein: item.protein_g ?? 0, carbs: item.carbs_g ?? 0, fat: item.fat_g ?? 0),
                 confidence: EstimatedItem.Confidence(rawValue: item.confidence?.lowercased() ?? "") ?? .low,
-                fromLabel: item.source?.lowercased() == "label")
+                fromLabel: item.source?.lowercased() == "label",
+                milliliters: item.ml.flatMap { $0.isFinite && $0 > 0 ? $0 : nil })
         }
         return FoodEstimate(items: items, note: nonEmpty(wire.note), analysis: nonEmpty(wire.analysis))
     }

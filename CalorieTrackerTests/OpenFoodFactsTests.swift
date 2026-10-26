@@ -21,6 +21,13 @@ struct OpenFoodFactsMappingTests {
         #expect(draft.barcode == "0055577420034")
     }
 
+    @Test func liquidsAreMeasuredLikeWater() throws {
+        let juice = try #require(map(#"{"status":1,"product":{"product_name":"Jus","product_quantity_unit":"mL","serving_quantity":"250","serving_quantity_unit":"ml","nutriments":{"energy-kcal_100g":45}}}"#))
+        #expect(juice.density == 1)
+        let cheese = try #require(map(#"{"status":1,"product":{"product_name":"Fromage","product_quantity_unit":"g","nutriments":{"energy-kcal_100g":350}}}"#))
+        #expect(cheese.density == nil)
+    }
+
     @Test func fallsBackToKilojoules() throws {
         let draft = try #require(map(#"{"status":1,"product":{"product_name":"X","nutriments":{"energy_100g":418.4}}}"#))
         #expect(abs(draft.per100g.kcal - 100) < 0.001)

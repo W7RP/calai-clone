@@ -2,13 +2,31 @@ import Foundation
 import SwiftData
 
 extension SavedMealItem {
-    init(foodName: String, grams: Double, macros: Macros, source: FoodSource, thumbnail: Data? = nil) {
-        self.init(foodName: foodName, grams: grams, macros: macros, sourceRaw: source.rawValue, thumbnail: thumbnail)
-    }
-
     init(entry: LogEntry) {
         self.init(foodName: entry.foodName, grams: entry.grams, macros: entry.macros, source: entry.source,
-                  thumbnail: entry.thumbnail)
+                  thumbnail: entry.thumbnail, entered: entry.entered)
+    }
+
+    init(foodName: String, grams: Double, macros: Macros, source: FoodSource, thumbnail: Data? = nil,
+         entered: EnteredAmount? = nil) {
+        self.init(foodName: foodName, grams: grams, macros: macros, sourceRaw: source.rawValue, thumbnail: thumbnail,
+                  entered: entered)
+    }
+
+    /// The amount the way it was entered, ready to edit.
+    var amountInput: AmountInput {
+        AmountInput(grams: grams, entered: entered, servingGrams: grams, density: Density.guess(for: foodName))
+    }
+
+    /// Takes a new amount and its nutrition, as edited.
+    mutating func update(amount: AmountInput, macros: Macros) {
+        guard let grams = amount.grams else { return }
+        self.grams = grams
+        kcal = macros.kcal
+        protein = macros.protein
+        carbs = macros.carbs
+        fat = macros.fat
+        entered = amount.entered
     }
 }
 

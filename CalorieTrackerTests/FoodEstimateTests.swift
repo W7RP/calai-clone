@@ -39,6 +39,16 @@ struct FoodEstimateParserTests {
         #expect(estimate.items.first?.confidence == .high)
     }
 
+    @Test func readsVolumeAndIgnoresZero() throws {
+        let estimate = try FoodEstimateParser.parse("""
+        {"items":[{"name":"Milk","grams":258,"ml":250,"kcal":130},{"name":"Toast","grams":30,"ml":0,"kcal":80}]}
+        """)
+        #expect(estimate.items[0].milliliters == 250)
+        #expect(abs((estimate.items[0].density ?? 0) - 1.032) < 0.001)
+        #expect(estimate.items[1].milliliters == nil)
+        #expect(estimate.items[1].density == nil)
+    }
+
     @Test func emptyItemsKeepNote() throws {
         let estimate = try FoodEstimateParser.parse(#"{"items":[],"note":"No food visible"}"#)
         #expect(estimate.items.isEmpty)
@@ -85,8 +95,7 @@ struct ReviewItemTests {
 
     @Test func changingAmountScalesNutrition() throws {
         var edited = item
-        edited.grams = "100"
-        edited.rescale(fromGrams: "200", toGrams: "100")
+        edited.nutrition.amount.text = "100"
         let parsed = try #require(edited.parsed)
         #expect(abs(parsed.macros.kcal - 130) < 0.5)
         #expect(abs(parsed.macros.carbs - 28.5) < 0.05)
@@ -94,9 +103,26 @@ struct ReviewItemTests {
 
     @Test func partialInputIsInvalidAndNotRescaled() {
         var edited = item
-        edited.grams = ""
-        edited.rescale(fromGrams: "200", toGrams: "")
+        edited.nutrition.amount.text = ""
         #expect(!edited.isValid)
-        #expect(edited.kcal == item.kcal)
+        #expect(edited.nutrition.kcal == item.nutrition.kcal)
+    }
+
+    @Test func estimatedPortionIsOneServing() throws {
+        var edited = item
+        edited.nutrition.amount.convert(to: .servings)
+        #expect(edited.nutrition.amount.text == "1")
+        edited.nutrition.amount.set(1.5)
+        let parsed = try #require(edited.parsed)
+        #expect(parsed.grams == 300)
+        #expect(abs(parsed.macros.kcal - 390) < 0.5)
+    }
+
+    @Test func drinksOpenInMillilitres() throws {
+        let cola = ReviewItem(EstimatedItem(name: "Cola", grams: 370, macros: Macros(kcal: 150, protein: 0, carbs: 39, fat: 0),
+                                            confidence: .high, fromLabel: false, milliliters: 355))
+        #expect(cola.nutrition.amount.unit == .milliliters)
+        #expect(cola.nutrition.amount.text == "355")
+        #expect(abs(try #require(cola.parsed).grams - 370) < 0.001)
     }
 }

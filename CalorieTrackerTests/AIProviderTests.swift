@@ -102,7 +102,7 @@ struct JSONValueTests {
         let items = try #require((root["properties"] as? [String: Any])?["items"] as? [String: Any])
         let item = try #require(items["items"] as? [String: Any])
         #expect(item["additionalProperties"] as? Bool == false)
-        #expect((item["required"] as? [String])?.count == 8)
+        #expect((item["required"] as? [String])?.count == 9)
     }
 
     @Test func geminiSchemaUsesOpenAPIDialect() throws {

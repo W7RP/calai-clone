@@ -14,7 +14,7 @@ struct FoodAmountView: View {
     let day: Date
     let onSaved: () -> Void
 
-    @State private var grams = ""
+    @State private var amount = AmountInput(grams: 100, measure: FoodMeasure())
     @State private var meal = Meal.snack
     @State private var loaded = false
 
@@ -32,22 +32,15 @@ struct FoodAmountView: View {
             }
 
             Section("Amount") {
-                NumberField(label: "Eaten", unit: "g", text: $grams)
-                HStack {
-                    if let serving = servingGrams {
-                        Button("1 serving") { grams = NumberInput.format(serving) }
-                    }
-                    Button("100 g") { grams = "100" }
-                }
-                .buttonStyle(.bordered)
+                AmountControl(amount: $amount)
                 Picker("Meal", selection: $meal) {
                     ForEach(Meal.allCases) { Text($0.title).tag($0) }
                 }
             }
 
-            if let amount = NumberInput.parse(grams) {
+            if let grams = amount.grams {
                 Section("You'll log") {
-                    Text(summary(per100g.forGrams(amount)))
+                    Text(summary(per100g.forGrams(grams)))
                         .monospacedDigit()
                 }
             }
@@ -58,13 +51,15 @@ struct FoodAmountView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save", action: save)
-                    .disabled(NumberInput.parse(grams).map { $0 <= 0 } ?? true)
+                    .disabled((amount.grams ?? 0) <= 0)
             }
         }
         .onAppear {
             guard !loaded else { return }
             loaded = true
-            grams = NumberInput.format(servingGrams ?? 100)
+            let measure = FoodMeasure(servingGrams: servingGrams, density: density ?? Density.guess(for: name))
+            amount = servingGrams.map { AmountInput(grams: $0, measure: measure, unit: .servings, quantity: 1) }
+                ?? AmountInput(grams: 100, measure: measure, unit: density == nil ? .grams : .milliliters)
             meal = Meal.suggested(for: .now)
         }
     }
@@ -97,25 +92,33 @@ struct FoodAmountView: View {
         }
     }
 
+    private var density: Double? {
+        switch choice {
+        case .cached(let food): food.density
+        case .draft(let draft): draft.density
+        }
+    }
+
     private func summary(_ m: Macros) -> String {
         "\(NumberInput.format(m.kcal, maxFractionDigits: 0)) kcal · P \(NumberInput.format(m.protein)) · C \(NumberInput.format(m.carbs)) · F \(NumberInput.format(m.fat))"
     }
 
     private func save() {
-        guard let amount = NumberInput.parse(grams), amount > 0 else { return }
+        guard let grams = amount.grams, grams > 0 else { return }
         let food: FoodItem
         switch choice {
         case .cached(let cached):
             food = cached
         case .draft(let draft):
             food = FoodItem(name: draft.name, brand: draft.brand, barcode: draft.barcode, per100g: draft.per100g,
-                            servingGrams: draft.servingGrams, source: draft.source)
+                            servingGrams: draft.servingGrams, density: draft.density, source: draft.source)
             context.insert(food)
         }
         food.lastUsed = .now
         let date = EntryFormView.combine(day: day, timeFrom: .now)
-        context.insert(LogEntry(date: date, meal: meal, foodName: food.name, grams: amount,
-                                macros: food.per100g.forGrams(amount), source: food.source, foodItem: food))
+        context.insert(LogEntry(date: date, meal: meal, foodName: food.name, grams: grams,
+                                macros: food.per100g.forGrams(grams), source: food.source, foodItem: food,
+                                entered: amount.entered))
         onSaved()
     }
 }

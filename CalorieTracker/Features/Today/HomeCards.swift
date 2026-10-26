@@ -180,9 +180,16 @@ struct FoodCard: View {
                         .padding(.vertical, 3)
                         .background(Theme.quiet, in: .capsule)
                 }
-                Label("\(Format.kcal(entry.kcal)) kcal", systemImage: "flame.fill")
-                    .font(.headline)
-                    .monospacedDigit()
+                HStack(alignment: .firstTextBaseline) {
+                    Label("\(Format.kcal(entry.kcal)) kcal", systemImage: "flame.fill")
+                        .font(.headline)
+                    Spacer(minLength: 4)
+                    Text(AmountText.describe(grams: entry.grams, entered: entry.entered))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .monospacedDigit()
                 HStack(spacing: 12) {
                     ForEach(MacroKind.allCases) { kind in
                         Label(Format.grams(kind.value(entry.macros)), systemImage: kind.symbol)
